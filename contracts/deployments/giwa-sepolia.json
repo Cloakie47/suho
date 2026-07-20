@@ -1,8 +1,8 @@
 {
   "chainId": 91342,
-  "suhoCodeAttester": "",
-  "suhoCodeSchemaUid": "",
-  "ondolTransferGuard": "",
-  "ariseModule": "",
-  "ondolAccountImpl": ""
+  "suhoCodeAttester": "0x88645529532844C380b40AB68E335CC7a8a0f63B",
+  "suhoCodeSchemaUid": "0x8f05c451eccf1fe63ba0518ad1f3338b92b7516eec60ea8ea9e528b20e49a3cf",
+  "ondolTransferGuard": "0x106953DB14B1183378976E128AE5cd40C4b493d2",
+  "ariseModule": "0x827375200CF4595f71b09497A65BAF10Ca907466",
+  "ondolAccountImpl": "0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4"
 }
