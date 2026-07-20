@@ -2,7 +2,11 @@
 src = "src"
 out = "out"
 libs = ["lib"]
-solc_version = "0.8.28"
+# Pragmas stay ^0.8.28; the newer compiler is needed only because
+# evm_version "osaka" (P256VERIFY precompile in the local/fork EVM, per
+# RIP-7212/EIP-7951) isn't a recognized target for solc 0.8.28.
+solc_version = "0.8.30"
+evm_version = "osaka"
 
 [rpc_endpoints]
 giwa_sepolia = "https://sepolia-rpc.giwa.io"
