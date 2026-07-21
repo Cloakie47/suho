@@ -3,8 +3,9 @@ import { isAddress, parseEther, type Hex } from "viem";
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey } from "../webauthn";
-import { DEMO_ACCOUNT, EXPLORER, LS_CREDENTIAL, OTP_THRESHOLD_WEI } from "../config";
+import { DEMO_ACCOUNT, LS_CREDENTIAL, OTP_THRESHOLD_WEI } from "../config";
 import { Seal, Spinner, TileDivider, fmtEth, shortAddr } from "../ui";
+import { useToast, type TxToast } from "../toast";
 
 interface Recipient {
   address: Hex;
@@ -14,14 +15,13 @@ interface Recipient {
   notFound?: boolean;
 }
 
+// The lifecycle toast is the transaction surface; inline phases cover only the
+// passkey prompt, the OTP interstitial, and pre-relay errors.
 type SendPhase =
   | { k: "idle" }
   | { k: "signing" }
-  | { k: "relaying" }
-  | { k: "pending"; hash: Hex }
-  | { k: "preconfirmed"; hash: Hex; ms: number }
-  | { k: "final"; hash: Hex; ms: number; inclusionMs: number }
-  | { k: "otp"; expiresAt: number; error?: string }
+  | { k: "inflight" }
+  | { k: "otp"; expiresAt: number }
   | { k: "error"; message: string };
 
 export function Send({
@@ -46,6 +46,7 @@ export function Send({
   const [otpValue, setOtpValue] = useState("");
   const [countdown, setCountdown] = useState(0);
   const debounceRef = useRef<number>();
+  const toast = useToast();
 
   // Live up.id resolution, 300ms debounce (spec §3 screen 2).
   useEffect(() => {
@@ -112,13 +113,18 @@ export function Send({
       setPhase({ k: "error", message: "Insufficient balance." });
       return;
     }
+    const fromOtp = phase.k === "otp" ? phase : null;
+    let handle: TxToast | null = null;
     try {
       setPhase({ k: "signing" });
       const calls: Call[] = [{ target: recipient.address, value, data: "0x" }];
       const nonce = await accountNonce(DEMO_ACCOUNT);
       const challenge = computeChallenge(DEMO_ACCOUNT, nonce, calls);
       const webauthn = await assertWithPasskey(credentialId, challenge);
-      setPhase({ k: "relaying" });
+      setPhase({ k: "inflight" });
+      // One toast per transaction; the verb matches the button that launched it.
+      handle = toast.begin(`Sending ${amount} ETH to ${recipient.display}…`);
+      const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
         DEMO_ACCOUNT,
@@ -126,14 +132,16 @@ export function Send({
         otpCode,
         webauthn,
       );
-      setPhase({ k: "pending", hash: txHash });
-      const timing = await watchReceipt(txHash, t0);
-      setPhase({ k: "preconfirmed", hash: txHash, ms: timing.preconfMs });
-      setPhase({ k: "final", hash: txHash, ms: timing.preconfMs, inclusionMs: timing.inclusionMs });
+      await watchReceipt(txHash, t0, {
+        preconf: (ms) => h.preconfirmed("Sent", ms),
+        final: () => h.final(txHash),
+      });
+      setOtpValue("");
+      setPhase({ k: "idle" });
       refresh();
     } catch (e) {
       if (e instanceof GuardianError && e.message === "OtpRequired") {
-        // Screen 3: OTP interstitial — request a code bound to this exact transfer.
+        handle?.dismiss(); // no toast — the interstitial IS the response (skill)
         try {
           const r = await api.otpRequest(DEMO_ACCOUNT, recipient.address, value.toString());
           setOtpValue("");
@@ -141,11 +149,11 @@ export function Send({
         } catch (e2) {
           setPhase({ k: "error", message: String(e2) });
         }
-      } else if (e instanceof GuardianError && phase.k === "otp") {
-        setPhase({ ...phase, error: e.message });
-      } else if (e instanceof GuardianError) {
-        setPhase({ k: "error", message: e.message });
+      } else if (handle) {
+        handle.error(e); // typed revert -> human sentence in the toast
+        setPhase(fromOtp ?? { k: "idle" }); // bad code: reopen the interstitial
       } else {
+        // pre-relay failures (e.g. passkey prompt cancelled) stay inline
         setPhase({ k: "error", message: String(e) });
       }
     }
@@ -231,7 +239,7 @@ export function Send({
           className="primary"
           disabled={
             !recipient || recipient.notFound || !amount ||
-            phase.k === "signing" || phase.k === "relaying" || phase.k === "pending"
+            phase.k === "signing" || phase.k === "inflight"
           }
           onClick={() => doSend("")}
         >
@@ -240,23 +248,6 @@ export function Send({
 
         {phase.k === "signing" && (
           <div className="status-line"><Spinner /> Confirm with your passkey…</div>
-        )}
-        {phase.k === "relaying" && (
-          <div className="status-line"><Spinner /> Relaying to GIWA…</div>
-        )}
-        {phase.k === "pending" && (
-          <div className="status-line">
-            <Spinner /> Pending — <a href={`${EXPLORER}/tx/${phase.hash}`} target="_blank">{shortAddr(phase.hash)}</a>
-          </div>
-        )}
-        {(phase.k === "preconfirmed" || phase.k === "final") && (
-          <div className="okbox">
-            ✓ Confirmed in <span className="timing">{phase.ms}ms</span>
-            {phase.k === "final" && phase.inclusionMs > 0 && (
-              <span className="muted"> (block inclusion {phase.inclusionMs}ms)</span>
-            )}{" "}
-            · <a href={`${EXPLORER}/tx/${phase.hash}`} target="_blank">explorer</a>
-          </div>
         )}
         {phase.k === "error" && <div className="errbox">{phase.message}</div>}
       </div>
@@ -281,7 +272,6 @@ export function Send({
               ? `code expires in ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, "0")}`
               : "code expired — request a new one by sending again"}
           </div>
-          {phase.error && <div className="errbox">{phase.error}</div>}
           <button
             className="primary"
             disabled={otpValue.length !== 6 || countdown === 0}

@@ -4,11 +4,20 @@ import { accountNonce, computeChallenge, watchReceipt, type Call } from "./chain
 import { assertWithPasskey } from "./webauthn";
 import { DEMO_ACCOUNT, LS_CREDENTIAL } from "./config";
 
+/** Lifecycle hooks so the caller's toast can mutate as the tx progresses.
+ *  `sent` fires once the relay accepted the tx (toast goes pending). */
+export interface ExecuteHooks {
+  sent?(txHash: Hex): void;
+  preconf?(ms: number): void;
+  final?(txHash: Hex, inclusionMs: number): void;
+}
+
 /** Shared passkey-authorized execute: sign over (account, chain, nonce, calls),
  *  relay through the guardian, watch Flashblocks for the real timing. */
 export async function executeWithPasskey(
   calls: Call[],
   otpCode = "",
+  hooks?: ExecuteHooks,
 ): Promise<{ txHash: Hex; preconfMs: number }> {
   const credentialId = localStorage.getItem(LS_CREDENTIAL);
   if (!credentialId) throw new Error("No passkey linked on this device — visit Upgrade first.");
@@ -22,6 +31,10 @@ export async function executeWithPasskey(
     otpCode,
     webauthn,
   );
-  const timing = await watchReceipt(txHash, t0);
+  hooks?.sent?.(txHash);
+  const timing = await watchReceipt(txHash, t0, {
+    preconf: (ms) => hooks?.preconf?.(ms),
+    final: (ms) => hooks?.final?.(txHash, ms),
+  });
   return { txHash, preconfMs: timing.preconfMs };
 }

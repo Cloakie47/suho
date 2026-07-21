@@ -5,12 +5,13 @@ import { executeWithPasskey } from "../execute";
 import { DEMO_ACCOUNT, EXPLORER } from "../config";
 import { Spinner, TileDivider, shortAddr } from "../ui";
 import { VCard, CardHistory } from "../vcard";
+import { useToast, type TxToast } from "../toast";
 
+// The lifecycle toast is the tx surface; inline phases cover the passkey
+// prompt and pre-relay errors only.
 type Phase =
   | { k: "idle" }
   | { k: "signing" }
-  | { k: "confirming" }
-  | { k: "done"; txHash: string; ms: number }
   | { k: "error"; message: string };
 
 export function Card({ status }: { status: Status }) {
@@ -19,6 +20,7 @@ export function Card({ status }: { status: Status }) {
   const [showHistory, setShowHistory] = useState(false);
   const [fields, setFields] = useState<CardFields>({ displayName: "", contact: "", remarks: "" });
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
+  const toast = useToast();
 
   const load = async () => {
     try {
@@ -32,16 +34,32 @@ export function Card({ status }: { status: Status }) {
   }, []);
 
   const submit = async () => {
+    const creating = !info?.current;
+    const nextV = (info?.current?.version ?? 0) + 1;
+    // Assigned inside executeWithPasskey's `sent` hook (object property so the
+    // narrowing survives the closure).
+    const h: { t: TxToast | null } = { t: null };
     try {
       setPhase({ k: "signing" });
       const calls = buildCardCalls(fields, info?.current?.uid ?? null);
-      setPhase({ k: "confirming" });
-      const { txHash, preconfMs } = await executeWithPasskey(calls);
-      setPhase({ k: "done", txHash, ms: preconfMs });
+      await executeWithPasskey(calls, "", {
+        // Button said "Sign & create"/"Sign & update"; toast continues the verb.
+        sent: () => {
+          h.t = toast.begin(creating ? "Creating your card…" : "Updating card…");
+        },
+        preconf: (ms) => h.t?.preconfirmed(creating ? "Card v1 created" : `Updated to v${nextV}`, ms),
+        final: (hash) => h.t?.final(hash),
+      });
+      setPhase({ k: "idle" });
       setEditing(false);
       await load();
     } catch (e) {
-      setPhase({ k: "error", message: e instanceof GuardianError ? e.message : String(e) });
+      if (h.t) {
+        h.t.error(e);
+        setPhase({ k: "idle" });
+      } else {
+        setPhase({ k: "error", message: e instanceof GuardianError ? e.message : String(e) });
+      }
     }
   };
 
@@ -136,7 +154,7 @@ export function Card({ status }: { status: Status }) {
           )}
           <button
             className="primary"
-            disabled={!fields.displayName || phase.k === "signing" || phase.k === "confirming"}
+            disabled={!fields.displayName || phase.k === "signing"}
             onClick={submit}
           >
             {info.current ? "Sign & update" : "Sign & create"}
@@ -152,19 +170,6 @@ export function Card({ status }: { status: Status }) {
       {phase.k === "signing" && (
         <div className="status-line">
           <Spinner /> Confirm with your passkey…
-        </div>
-      )}
-      {phase.k === "confirming" && (
-        <div className="status-line">
-          <Spinner /> Attesting on GIWA…
-        </div>
-      )}
-      {phase.k === "done" && (
-        <div className="okbox">
-          ✓ Card attested in <span className="timing">{phase.ms}ms</span> ·{" "}
-          <a href={`${EXPLORER}/tx/${phase.txHash}`} target="_blank">
-            explorer
-          </a>
         </div>
       )}
       {phase.k === "error" && <div className="errbox">{phase.message}</div>}

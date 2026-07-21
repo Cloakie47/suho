@@ -1,16 +1,26 @@
 :root {
+  /* suho-design skill tokens */
+  --ink: #121110;
+  --ink-raised: #1c1a18;
+  --paper: #f3efe7;
+  --paper-dim: #a8a29a;
+  --seal: #e8442e;
+  --seal-deep: #8c2318;
+  --gild: #c9a15c;
+  --jade: #4c8a6e;
+
+  /* app aliases (pre-skill names, mapped onto the tokens) */
   --bg: #1b1917;
   --panel: #26221f;
   --panel-2: #2f2a26;
   --line: #3a342f;
-  --text: #ede7e0;
-  --muted: #a89f95;
-  --accent: #e4572e;
-  --accent-dim: #b8451f;
-  --ok: #6fbf73;
+  --text: var(--paper);
+  --muted: var(--paper-dim);
+  --accent: var(--seal);
+  --accent-dim: var(--seal-deep);
+  --ok: var(--jade);
   --warn: #e0a83c;
   --danger: #d9534f;
-  --seal: #c0392b;
 }
 
 * { box-sizing: border-box; }
@@ -111,6 +121,74 @@ body {
 }
 .vcard-meta { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 10px; }
 .vcard-honesty { color: var(--muted); font-size: 0.72rem; margin-top: 8px; font-style: italic; }
+
+/* Toast system (suho-design skill): ink-raised glass, 14px radius, 3px seal rule */
+.toast-stack {
+  position: fixed; top: 16px; right: 16px; z-index: 1000;
+  display: flex; flex-direction: column; gap: 10px;
+  width: 330px; max-width: calc(100vw - 24px);
+}
+@media (max-width: 480px) {
+  .toast-stack { right: auto; left: 50%; transform: translateX(-50%); top: 10px; }
+}
+.toast {
+  position: relative; overflow: hidden;
+  background: rgba(28, 26, 24, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(243, 239, 231, 0.08);
+  border-left: 3px solid var(--seal);
+  border-radius: 14px;
+  padding: 12px 14px 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: toast-in 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(-10px); } }
+.toast-row { display: flex; align-items: flex-start; gap: 10px; }
+.toast-row .spinner { margin-top: 2px; flex: none; }
+.toast-text { flex: 1; min-width: 0; }
+.toast-label { font-size: 0.92rem; color: var(--paper); line-height: 1.35; overflow-wrap: break-word; }
+.toast-ms { font-family: Consolas, "IBM Plex Mono", monospace; color: var(--jade); font-weight: 600; }
+.toast-link { display: inline-block; margin-top: 3px; font-size: 0.8rem; color: var(--paper-dim); }
+.toast-link:hover { color: var(--seal); }
+.toast-x {
+  border: 0; background: none; color: var(--paper-dim);
+  font-size: 1.15rem; line-height: 1; cursor: pointer; padding: 0 2px; flex: none;
+}
+.toast-x:focus-visible { outline: 2px solid var(--seal); border-radius: 4px; }
+.toast-details { margin-top: 4px; font-size: 0.75rem; color: var(--paper-dim); }
+.toast-details summary { cursor: pointer; }
+.toast-raw { font-family: Consolas, monospace; word-break: break-all; margin-top: 4px; max-height: 90px; overflow: auto; }
+
+/* seal-stamp: reserved for verification moments (skill) */
+.toast-seal { display: inline-flex; flex: none; animation: seal-stamp 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes seal-stamp {
+  0% { transform: scale(1.15); opacity: 0; }
+  60% { transform: scale(0.97) rotate(-5deg); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+/* tile-curve progress: shimmer while pending, completes in jade on preconf */
+.toast-curve { display: block; width: 100%; height: 10px; margin-top: 6px; }
+.toast-curve-path {
+  stroke: var(--paper-dim); stroke-width: 2; stroke-linecap: round; fill: none;
+  stroke-dasharray: 60 200; opacity: 0.45;
+  animation: curve-shimmer 1.4s linear infinite;
+}
+@keyframes curve-shimmer { from { stroke-dashoffset: 260; } to { stroke-dashoffset: 0; } }
+.toast-curve-path.done {
+  stroke: var(--jade); stroke-dasharray: 260 260; stroke-dashoffset: 0; opacity: 0.9;
+  animation: curve-complete 300ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes curve-complete { from { stroke-dashoffset: 260; } }
+.toast-curve-path.err { stroke: var(--seal); stroke-dasharray: 260 260; stroke-dashoffset: 0; opacity: 0.55; animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: toast-fade 200ms ease; }
+  .toast-seal { animation: toast-fade 200ms ease; }
+  .toast-curve-path, .toast-curve-path.done { animation: none; }
+}
+@keyframes toast-fade { from { opacity: 0; } }
 
 input[type="text"], input[type="number"] {
   width: 100%; padding: 12px 14px; border-radius: 10px;

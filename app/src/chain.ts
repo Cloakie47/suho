@@ -49,10 +49,13 @@ export function computeChallenge(account: Hex, nonce: bigint, calls: Call[]): He
   );
 }
 
-/** Poll Flashblocks (50ms) + normal RPC (200ms) for the receipt; report timings. */
+/** Poll Flashblocks (50ms) + normal RPC for the receipt; report timings.
+ *  Optional callbacks fire the moment each receipt lands, so a single UI
+ *  surface (the lifecycle toast) can mutate pending -> preconfirmed -> final. */
 export async function watchReceipt(
   hash: Hex,
   t0: number,
+  on?: { preconf?: (ms: number) => void; final?: (ms: number) => void },
 ): Promise<{ preconfMs: number; inclusionMs: number; status: string }> {
   let preconfMs = 0;
   let inclusionMs = 0;
@@ -67,8 +70,12 @@ export async function watchReceipt(
     if (preconfMs === 0 && rf) {
       preconfMs = Math.round(now - t0);
       status = rf.status;
+      on?.preconf?.(preconfMs);
     }
-    if (inclusionMs === 0 && rn) inclusionMs = Math.round(now - t0);
+    if (inclusionMs === 0 && rn) {
+      inclusionMs = Math.round(now - t0);
+      on?.final?.(inclusionMs);
+    }
     await new Promise((r) => setTimeout(r, 50));
   }
   return { preconfMs, inclusionMs, status };

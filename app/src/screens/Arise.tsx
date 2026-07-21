@@ -5,6 +5,7 @@ import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chai
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
 import { DEMO_ACCOUNT, EXPLORER, LS_CREDENTIAL } from "../config";
 import { Spinner, TileDivider, shortAddr } from "../ui";
+import { useToast, type TxToast } from "../toast";
 
 type Stage =
   | { k: "intro" }
@@ -25,6 +26,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   const [countdown, setCountdown] = useState(0);
   const [proof, setProof] = useState<ProofState>({});
   const [oldCredentialId] = useState(() => localStorage.getItem(LS_CREDENTIAL));
+  const toast = useToast();
 
   useEffect(() => {
     if (stage.k !== "code-sent") return;
@@ -64,17 +66,20 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
 
   const complete = async (key: PasskeyInfo) => {
     setBusy("Submitting arise()…");
+    // Button says "Arise"; the toast continues the verb through the lifecycle.
+    const handle = toast.begin("Rising…");
     try {
       const t0 = performance.now();
       const r = await api.ariseComplete(DEMO_ACCOUNT, key.x, key.y, code);
-      const timing = await watchReceipt(r.txHash, t0);
+      const timing = await watchReceipt(r.txHash, t0, {
+        preconf: (ms) => handle.preconfirmed("You have risen", ms),
+        final: () => handle.final(r.txHash),
+      });
       localStorage.setItem(LS_CREDENTIAL, key.credentialId);
       setStage({ k: "arisen", key, txHash: r.txHash, ms: timing.preconfMs });
       refresh();
     } catch (e) {
-      if (stage.k === "code-sent") {
-        setStage({ ...stage, error: e instanceof GuardianError ? e.message : String(e) });
-      }
+      handle.error(e); // CodeInvalid/CodeExpired -> sentences; entry stays open
     } finally {
       setBusy(null);
     }
@@ -83,12 +88,15 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   /** Prove-it panel: a real 0.0001 ETH send to suho.up.id with either key. */
   const proveSend = async (credentialId: string, label: "old" | "fresh") => {
     setBusy(label === "old" ? "Trying the OLD passkey…" : "Sending with the NEW passkey…");
+    let handle: TxToast | null = null;
     try {
       const target = (await api.resolve("suho")).address!;
       const calls: Call[] = [{ target, value: parseEther("0.0001"), data: "0x" }];
       const nonce = await accountNonce(DEMO_ACCOUNT);
       const challenge = computeChallenge(DEMO_ACCOUNT, nonce, calls);
       const webauthn = await assertWithPasskey(credentialId, challenge);
+      handle = toast.begin("Sending 0.0001 ETH to suho.up.id…");
+      const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
         DEMO_ACCOUNT,
@@ -96,7 +104,10 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
         "",
         webauthn,
       );
-      const timing = await watchReceipt(txHash, t0);
+      const timing = await watchReceipt(txHash, t0, {
+        preconf: (ms) => h.preconfirmed("Sent", ms),
+        final: () => h.final(txHash),
+      });
       setProof((p) => ({
         ...p,
         [label]: {
@@ -107,6 +118,9 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
       }));
       refresh();
     } catch (e) {
+      // Old-key rejection: the toast reads "This passkey can't sign for the
+      // account." — the panel below interprets what that proves.
+      handle?.error(e);
       const msg = e instanceof GuardianError ? e.message : String(e);
       setProof((p) => ({ ...p, [label]: { ok: false, detail: msg } }));
     } finally {
@@ -165,7 +179,6 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
               ? `code expires in ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, "0")}`
               : "code expired — go back and request a new one"}
           </div>
-          {stage.error && <div className="errbox">{stage.error}</div>}
           <button
             className="primary"
             disabled={code.length !== 6 || countdown === 0 || !!busy}
