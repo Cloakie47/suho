@@ -32,6 +32,23 @@ import {
 } from "./contracts.js";
 import { resolveName, reverseName } from "./upid.js";
 import { encodeWebAuthnSig, spkiToXY, type BrowserAssertion } from "./webauthn.js";
+import { printCodeBanner } from "./banner.js";
+
+// P4: demo readiness — alice must cover one verified send (0.0002) plus one OTP
+// send at threshold+0.001, with 30% margin. Execute gas is relayer-paid, so only
+// transfer values count. Threshold is read from the deployed guard at startup.
+const VERIFIED_SEND_WEI = 200_000_000_000_000n; // 0.0002 ether
+const OTP_MARGIN_WEI = 1_000_000_000_000_000n; // 0.001 ether
+let demoRequiredWei = 0n;
+(async () => {
+  const threshold = await publicClient.readContract({
+    address: ADDR.ondolTransferGuard,
+    abi: [{ type: "function", name: "otpThreshold", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" }] as const,
+    functionName: "otpThreshold",
+  });
+  demoRequiredWei = ((VERIFIED_SEND_WEI + threshold + OTP_MARGIN_WEI) * 13n) / 10n;
+  console.log(`demo readiness threshold: ${demoRequiredWei} wei`);
+})().catch((e) => console.error("could not read guard threshold:", e));
 
 const app = express();
 app.use(express.json());
@@ -93,6 +110,8 @@ app.get("/status", async (req, res) => {
       delegatedTo: code && code.startsWith(DELEGATION_PREFIX) ? `0x${code.slice(8)}` : null,
       initialized,
       accountNonce,
+      demoReady: demoRequiredWei > 0n ? balance >= demoRequiredWei : true,
+      demoRequiredWei: demoRequiredWei.toString(),
     });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -234,20 +253,7 @@ app.post("/otp/request", async (req, res) => {
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
     issuedCodes.set(domain, { expiresAt: Number(expiry) });
-    console.log(`
-  ┌──────────────────────────────────────────────┐
-  │        UPBIT  VERIFICATION  SERVICE          │
-  │                                              │
-  │   Transfer verification code                 │
-  │   to unverified recipient                    │
-  │   ${recipient}   │
-  │                                              │
-  │            ┏━━━━━━━━━━━━━━━━┓                │
-  │            ┃    ${code.slice(0, 3)} ${code.slice(3)}     ┃                │
-  │            ┗━━━━━━━━━━━━━━━━┛                │
-  │                                              │
-  │   Valid for 10 minutes.                      │
-  └──────────────────────────────────────────────┘`);
+    printCodeBanner("TRANSFER", recipient, code);
     res.json({ ok: true, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -293,21 +299,7 @@ app.post("/arise/request", async (req, res) => {
 
     // Offchain delivery IS part of the show: this console plays the
     // "Upbit Verification Service" on the projector.
-    const banner = `
-  ┌──────────────────────────────────────────────┐
-  │        UPBIT  VERIFICATION  SERVICE          │
-  │                                              │
-  │   Account recovery code for                  │
-  │   ${account}   │
-  │                                              │
-  │            ┏━━━━━━━━━━━━━━━━┓                │
-  │            ┃    ${code.slice(0, 3)} ${code.slice(3)}     ┃                │
-  │            ┗━━━━━━━━━━━━━━━━┛                │
-  │                                              │
-  │   Valid for 10 minutes. Never share this     │
-  │   code with anyone claiming to be support.   │
-  └──────────────────────────────────────────────┘`;
-    console.log(banner);
+    printCodeBanner("RECOVERY", account, code);
     res.json({ ok: true, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -326,9 +318,17 @@ app.post("/arise/complete", async (req, res) => {
       functionName: "arise",
       args: [account, newX, newY, code],
     });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-    res.json({ status: receipt.status, txHash, explorer: explorerTx(txHash) });
+    // P6: return immediately — the client watches Flashblocks for the receipt
+    // and shows the real measured preconfirmation time, same as sends.
+    res.json({ status: "submitted", txHash, explorer: explorerTx(txHash) });
   } catch (e) {
+    const reverted =
+      e instanceof BaseError
+        ? (e.walk((err) => err instanceof ContractFunctionRevertedError) as
+            | ContractFunctionRevertedError
+            | undefined)
+        : undefined;
+    if (reverted?.data?.errorName) return res.status(400).json({ error: reverted.data.errorName });
     res.status(500).json({ error: String(e) });
   }
 });

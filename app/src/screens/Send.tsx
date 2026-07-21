@@ -155,6 +155,9 @@ export function Send({ status, refresh }: { status: Status; refresh: () => void 
           {fmtEth(status.balance)} <small>ETH</small>
         </div>
         <div className="muted">Flashblocks-fresh · smart account · nonce {status.accountNonce}</div>
+        {status.demoReady === false && (
+          <div className="chip-warn">⚠ Demo headroom low — top up before presenting</div>
+        )}
       </div>
 
       <TileDivider />
@@ -177,12 +180,17 @@ export function Send({ status, refresh }: { status: Status; refresh: () => void 
         )}
         {recipient && !recipient.notFound && (
           <div className={`recipient-card ${recipient.verified ? "verified" : "unverified"}`}>
-            {recipient.verified ? <Seal small /> : <span style={{ fontSize: "1.2rem" }}>⚠️</span>}
+            {recipient.verified ? <Seal large /> : <span style={{ fontSize: "1.2rem" }}>⚠️</span>}
             <div>
               <div className="name">{recipient.display}</div>
               <div className="muted mono">{recipient.address}</div>
               {recipient.verified ? (
-                <div className="okbox">Verified by {recipient.verifiedBy}</div>
+                <div>
+                  <div className="verified-label">Verified human</div>
+                  <div className="attestation-note" title={`Attester: ${recipient.verifiedBy}`}>
+                    Dojang attestation · testnet issuer
+                  </div>
+                </div>
               ) : (
                 <div className="warnbox">
                   Unverified address — Suho can’t identify who this is.

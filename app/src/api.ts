@@ -12,6 +12,8 @@ export interface Status {
   delegatedTo: Hex | null;
   initialized: boolean;
   accountNonce: string;
+  demoReady?: boolean;
+  demoRequiredWei?: string;
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {

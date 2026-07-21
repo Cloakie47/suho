@@ -59,7 +59,9 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
           {fmtEth(status.balance)} <small>ETH</small>
         </div>
         {status.isVerified && (
-          <div className="muted">Identity verified by {status.verifiedBy} · Dojang attestation</div>
+          <div className="attestation-note" title={`Attester: ${status.verifiedBy}`}>
+            Dojang attestation · testnet issuer
+          </div>
         )}
       </div>
 

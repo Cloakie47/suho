@@ -10,7 +10,7 @@ type Stage =
   | { k: "intro" }
   | { k: "created"; key: PasskeyInfo }
   | { k: "code-sent"; key: PasskeyInfo; expiresAt: number; error?: string }
-  | { k: "arisen"; key: PasskeyInfo; txHash: Hex }
+  | { k: "arisen"; key: PasskeyInfo; txHash: Hex; ms: number }
   | { k: "error"; message: string };
 
 interface ProofState {
@@ -65,9 +65,11 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   const complete = async (key: PasskeyInfo) => {
     setBusy("Submitting arise()…");
     try {
+      const t0 = performance.now();
       const r = await api.ariseComplete(DEMO_ACCOUNT, key.x, key.y, code);
+      const timing = await watchReceipt(r.txHash, t0);
       localStorage.setItem(LS_CREDENTIAL, key.credentialId);
-      setStage({ k: "arisen", key, txHash: r.txHash });
+      setStage({ k: "arisen", key, txHash: r.txHash, ms: timing.preconfMs });
       refresh();
     } catch (e) {
       if (stage.k === "code-sent") {
@@ -184,7 +186,8 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
               arise tx:{" "}
               <a href={`${EXPLORER}/tx/${stage.txHash}`} target="_blank">
                 {shortAddr(stage.txHash)}
-              </a>
+              </a>{" "}
+              {stage.ms > 0 && <span className="timing">· confirmed in {stage.ms}ms</span>}
             </p>
           </div>
           <div className="card">

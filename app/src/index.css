@@ -62,6 +62,16 @@ body {
   user-select: none;
 }
 .seal.small { min-width: 26px; height: 26px; font-size: 0.75rem; border-width: 2px; }
+.seal.large { min-width: 52px; height: 52px; font-size: 1.35rem; border-width: 3px; border-radius: 10px; }
+
+.verified-label { color: var(--ok); font-weight: 700; font-size: 1.05rem; }
+.attestation-note { color: var(--muted); font-size: 0.8rem; cursor: help; }
+
+.chip-warn {
+  display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 999px;
+  background: rgba(224, 168, 60, 0.15); border: 1px solid rgba(224, 168, 60, 0.5);
+  color: var(--warn); font-size: 0.78rem;
+}
 
 input[type="text"], input[type="number"] {
   width: 100%; padding: 12px 14px; border-radius: 10px;

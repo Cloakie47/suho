@@ -1,7 +1,7 @@
 /** The dojang-style verified seal — the one flourish that must land. */
-export function Seal({ small }: { small?: boolean }) {
+export function Seal({ small, large }: { small?: boolean; large?: boolean }) {
   return (
-    <span className={`seal${small ? " small" : ""}`} title="Dojang-verified">
+    <span className={`seal${small ? " small" : ""}${large ? " large" : ""}`} title="Dojang-verified">
       수호
     </span>
   );

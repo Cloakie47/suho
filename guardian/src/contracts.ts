@@ -51,6 +51,10 @@ export const suhoCodeAttesterAbi = parseAbi([
 
 export const ariseModuleAbi = parseAbi([
   "function arise(address account, bytes32 newX, bytes32 newY, string code)",
+  "error CodeNotFound()",
+  "error CodeInvalid()",
+  "error CodeExpired()",
+  "error CodeAlreadyUsed()",
 ]);
 
 // Includes every custom error the execute() path can surface (account, guard,
