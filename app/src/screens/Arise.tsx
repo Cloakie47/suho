@@ -3,7 +3,7 @@ import { encodeAbiParameters, keccak256, parseEther, type Hex } from "viem";
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
-import { DEMO_ACCOUNT, EXPLORER, LS_CREDENTIAL } from "../config";
+import { activeAccount, EXPLORER, LS_CREDENTIAL } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { recordSend } from "../stats";
@@ -66,7 +66,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
       const newPubKeyHash = keccak256(
         encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [key.x, key.y]),
       );
-      const r = await api.ariseRequest(DEMO_ACCOUNT, newPubKeyHash);
+      const r = await api.ariseRequest(activeAccount(), newPubKeyHash);
       setCode("");
       setStage({ k: "code-sent", key, expiresAt: r.expiresAt });
     } catch (e) {
@@ -82,7 +82,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
     const handle = toast.begin("Rising…");
     try {
       const t0 = performance.now();
-      const r = await api.ariseComplete(DEMO_ACCOUNT, key.x, key.y, code);
+      const r = await api.ariseComplete(activeAccount(), key.x, key.y, code);
       const timing = await watchReceipt(r.txHash, t0, {
         preconf: (ms) => handle.preconfirmed("You have risen", ms),
         final: () => handle.final(r.txHash),
@@ -105,14 +105,14 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
     try {
       const target = (await api.resolve("suho")).address!;
       const calls: Call[] = [{ target, value: parseEther("0.0001"), data: "0x" }];
-      const nonce = await accountNonce(DEMO_ACCOUNT);
-      const challenge = computeChallenge(DEMO_ACCOUNT, nonce, calls);
+      const nonce = await accountNonce(activeAccount());
+      const challenge = computeChallenge(activeAccount(), nonce, calls);
       const webauthn = await assertWithPasskey(credentialId, challenge);
       handle = toast.begin("Sending 0.0001 ETH to suho.up.id…");
       const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
-        DEMO_ACCOUNT,
+        activeAccount(),
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
         "",
         webauthn,

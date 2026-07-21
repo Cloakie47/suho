@@ -5,6 +5,7 @@ contracts/broadcast/
 
 # Node
 node_modules/
+app/dist/
 
 # Secrets — never commit keys or env files
 .env

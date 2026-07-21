@@ -9,7 +9,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api, type Status } from "./api";
-import { DEMO_ACCOUNT } from "./config";
+import { activeAccount, hasAccount, isLegacyDemo, setActiveAccount, DEMO_ACCOUNT } from "./config";
+import { Onboard } from "./screens/Onboard";
 import { Seal, Spinner, fmtEth, shortAddr } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
@@ -70,11 +71,12 @@ function IdentityCard({ status, onOpen }: { status: Status; onOpen: () => void }
           Dojang attestation · testnet issuer
         </div>
       )}
-      {status.demoReady === false ? (
-        <span className="chip-warn">⚠ Demo headroom low</span>
-      ) : (
-        <span className="chip-ok">Demo ready</span>
-      )}
+      {isLegacyDemo() &&
+        (status.demoReady === false ? (
+          <span className="chip-warn">⚠ Demo headroom low</span>
+        ) : (
+          <span className="chip-ok">Demo ready</span>
+        ))}
     </div>
   );
 }
@@ -85,10 +87,11 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [prefillRecipient, setPrefillRecipient] = useState<string | null>(null);
   const [verifyId, setVerifyId] = useState<string | null>(null);
+  const [onboarded, setOnboarded] = useState(() => hasAccount());
 
   const refresh = useCallback(async () => {
     try {
-      const s = await api.status(DEMO_ACCOUNT);
+      const s = await api.status(activeAccount());
       // first-run routing: an already-upgraded account lands on Send, not Upgrade
       setStatus((prev) => {
         if (prev === null && s.isOndolAccount && s.initialized) setScreen("send");
@@ -130,6 +133,28 @@ export default function App() {
           <Verify id={verifyId} />
         </div>
       </div>
+    );
+  }
+
+  // Phase O §O5: fresh browsers meet onboarding first; the demo account is the
+  // clearly-labeled legacy path.
+  if (!onboarded) {
+    return (
+      <Onboard
+        onDone={() => {
+          setStatus(null);
+          setOnboarded(true);
+          setScreen("send");
+          refresh();
+        }}
+        onLegacy={() => {
+          setActiveAccount(DEMO_ACCOUNT);
+          setStatus(null);
+          setOnboarded(true);
+          setScreen("upgrade");
+          refresh();
+        }}
+      />
     );
   }
 

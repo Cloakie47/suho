@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { api, type DirEntry } from "../api";
-import { DEMO_ACCOUNT } from "../config";
+import { activeAccount } from "../config";
 import { Seal, Spinner, shortAddr } from "../ui";
 
 /// D2 under the R5 composition pass: table-like rows, sticky search, count
@@ -80,7 +80,7 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
             </button>
           </div>
           {entries.map((e) => {
-            const isSelf = e.address.toLowerCase() === DEMO_ACCOUNT.toLowerCase();
+            const isSelf = e.address.toLowerCase() === activeAccount().toLowerCase();
             return (
               <div className="dir-row" key={e.name}>
                 <Seal small />

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, GuardianError, type CardInfo, type Status } from "../api";
 import { buildCardCalls, type CardFields } from "../card";
 import { executeWithPasskey } from "../execute";
-import { DEMO_ACCOUNT } from "../config";
+import { activeAccount } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { VCard, CardHistory } from "../vcard";
 import { useToast, type TxToast } from "../toast";
@@ -23,7 +23,7 @@ export function Card({ status }: { status: Status }) {
 
   const load = async () => {
     try {
-      setInfo(await api.card(DEMO_ACCOUNT));
+      setInfo(await api.card(activeAccount()));
     } catch (e) {
       setPhase({ k: "error", message: String(e) });
     }
@@ -92,7 +92,7 @@ export function Card({ status }: { status: Status }) {
               <>
                 <VCard
                   card={info.current}
-                  address={DEMO_ACCOUNT}
+                  address={activeAccount()}
                   upId={status.upId}
                   verified={status.isVerified}
                 />
@@ -103,8 +103,8 @@ export function Card({ status }: { status: Status }) {
                     </button>
                     <div className="muted" style={{ marginTop: 10, fontSize: "0.8rem" }}>
                       Share the read-only view:{" "}
-                      <a href={`#/verify/${DEMO_ACCOUNT}`} target="_blank">
-                        /verify/{shortAddr(DEMO_ACCOUNT)}
+                      <a href={`#/verify/${activeAccount()}`} target="_blank">
+                        /verify/{shortAddr(activeAccount())}
                       </a>
                     </div>
                   </div>

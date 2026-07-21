@@ -1,6 +1,6 @@
 import { encodeAbiParameters, encodeFunctionData, parseAbi, type Hex } from "viem";
 import type { Call } from "./chain";
-import { CARD_SCHEMA_UID, DEMO_ACCOUNT, EAS_ADDRESS } from "./config";
+import { CARD_SCHEMA_UID, activeAccount, EAS_ADDRESS } from "./config";
 
 /// C2/C3: the card attestation is made BY the Ondol account itself — the app
 /// builds EAS attest()/revoke() calldata and routes it through execute() with a
@@ -37,7 +37,7 @@ export function buildCardCalls(fields: CardFields, prevUid: Hex | null): Call[] 
         {
           schema: CARD_SCHEMA_UID,
           data: {
-            recipient: DEMO_ACCOUNT,
+            recipient: activeAccount(),
             expirationTime: 0n,
             revocable: true,
             refUID: prevUid ?? ZERO32,

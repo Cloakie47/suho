@@ -29,14 +29,33 @@ large transfers to strangers, and code-based recovery when a device is lost.
 Contract addresses, schema UIDs, and explorer links: `docs/deployments.md`
 (all four Suho contracts are source-verified on the explorer).
 
-## Custody honesty note
+## Custody (Phase O: non-custodial end to end)
 
-In the demo, the Guardian holds the demo EOA's key **only** to sign the
-one-time EIP-7702 upgrade authorization. In production that authorization is
-signed client-side by the user's existing wallet. Everything after the upgrade
-is already non-custodial: every operation is passkey-signed by the user, the
-guardian is a dumb relayer, and the contracts enforce it — our fork tests prove
-a malicious relayer cannot tamper with, replay, or redirect a signed batch.
+**New-user onboarding never moves a key anywhere.** The browser generates a
+one-time secp256k1 bootstrap keypair in a function closure, uses it for exactly
+two signatures — the EIP-7702 authorization and the EIP-712 digest that binds
+the first passkey (`OndolAccountV2.initializeWithSig`, low-s enforced) — and
+drops every reference. It is never put in state, storage, logs, or any network
+payload; only the *signatures* travel. The guardian relays one type-4
+transaction and pays its gas; a request-body assertion rejects anything
+key-shaped on every endpoint, structurally. From that moment the passkey is the
+only practical authority; verification (`payAndIssueEAS`, self-attested by the
+account) and the up.id name claim (`register`, `msg.sender` = the account) are
+call payloads the account executes itself, passkey-signed, relayer-carried.
+
+**7702 root-key honesty.** By EIP-7702's design the secp256k1 key remains the
+theoretical root authority of the address. Ours is generated in-tab, used once,
+and garbage-collected — unrecoverable and un-persisted, by us or anyone. The
+practical threat model is therefore the browser session during those
+milliseconds of signing; after that, key compromise is impossible because the
+key no longer exists. Recovery runs through Arise's purpose-bound single-use
+codes while the testnet issuer operates.
+
+**Legacy demo path.** The alice account predates Phase O: the guardian held her
+EOA key for the original one-time upgrade (and its final legacy use, the v1→v2
+re-delegation). It is labeled as such in the app. Existing-wallet upgrades
+(users delegating their own Rabby/MetaMask EOAs) are pending wallet-side 7702
+authorization support — stated, not promised.
 
 Similarly, the Suho Card renders its own honesty line: *identity is verified by
 Dojang; card fields are self-declared by the verified owner.* The seal attests

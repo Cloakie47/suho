@@ -60,6 +60,27 @@ export const api = {
       post({ account, newX, newY, code }),
     ),
   demoCredential: () => req<{ credentialId: string }>("/demo-credential"),
+  /** O3: only an address, two signatures, and a public key ever travel. */
+  onboard: (body: {
+    address: Hex;
+    authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
+    initSig: { v: number; r: Hex; s: Hex };
+    passkey: { x: Hex; y: Hex };
+  }) =>
+    req<{ status: string; txHash: Hex; explorer: string; initialized: boolean }>(
+      "/onboard",
+      post(body),
+    ),
+  verifyMe: (account: Hex) =>
+    req<{ calls: { target: Hex; value: string; data: Hex }[]; feeWei: string }>(
+      "/verify-me",
+      post({ account }),
+    ),
+  claimName: (account: Hex, label: string) =>
+    req<{ calls: { target: Hex; value: string; data: Hex }[]; label: string }>(
+      "/claim-name",
+      post({ account, label }),
+    ),
   card: (id: string) => req<CardInfo>(`/card?id=${encodeURIComponent(id)}`),
   directory: (q = "", refresh = false) =>
     req<{ entries: DirEntry[]; total: number; shown: number; scannedToBlock: string }>(

@@ -15,7 +15,8 @@ import {
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey } from "../webauthn";
-import { DEMO_ACCOUNT, LS_CREDENTIAL, OTP_THRESHOLD_WEI } from "../config";
+import { activeAccount, isLegacyDemo, LS_CREDENTIAL, OTP_THRESHOLD_WEI } from "../config";
+import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { fetchActivity, type ActivityItem } from "../activity";
@@ -361,8 +362,8 @@ export function Send({
     try {
       setPhase({ k: "signing" });
       const calls: Call[] = [{ target: recipient.address, value, data: "0x" }];
-      const nonce = await accountNonce(DEMO_ACCOUNT);
-      const challenge = computeChallenge(DEMO_ACCOUNT, nonce, calls);
+      const nonce = await accountNonce(activeAccount());
+      const challenge = computeChallenge(activeAccount(), nonce, calls);
       const webauthn = await assertWithPasskey(credentialId, challenge);
       setPhase({ k: "inflight" });
       // One toast per transaction; the verb matches the button that launched it.
@@ -370,7 +371,7 @@ export function Send({
       const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
-        DEMO_ACCOUNT,
+        activeAccount(),
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
         otpCode,
         webauthn,
@@ -381,6 +382,7 @@ export function Send({
         reverted: () => h.error(new Error("TransactionReverted")),
       });
       recordSend(txHash, timing.preconfMs); // session stat cards + feed ms
+      localStorage.setItem(LS_FIRST_SEND, "1"); // O5 checklist step 4
       setOtpValue("");
       setPhase({ k: "idle" });
       setActBump((b) => b + 1);
@@ -389,7 +391,7 @@ export function Send({
       if (e instanceof GuardianError && e.message === "OtpRequired") {
         handle?.dismiss(); // no toast — the interstitial IS the response (skill)
         try {
-          const r = await api.otpRequest(DEMO_ACCOUNT, recipient.address, value.toString());
+          const r = await api.otpRequest(activeAccount(), recipient.address, value.toString());
           setOtpValue("");
           setPhase({ k: "otp", expiresAt: r.expiresAt });
         } catch (e2) {
@@ -484,6 +486,9 @@ export function Send({
         )}
         {phase.k === "error" && <div className="errbox">{phase.message}</div>}
       </div>
+
+      {/* O5: guided setup for onboarded accounts (legacy demo skips it) */}
+      {!isLegacyDemo() && <Checklist status={status} refresh={refresh} />}
 
       {/* R2 row 2: session stat cards */}
       <StatCards verifiedNames={verifiedNames} />

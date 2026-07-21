@@ -28,6 +28,10 @@ import {
   suhoCodeAttesterAbi,
   ariseModuleAbi,
   ondolAccountAbi,
+  ondolV2Abi,
+  faucetExtensionAbi,
+  registerAbi,
+  upnameRegistryAbi,
   explorerTx,
 } from "./contracts.js";
 import { resolveName, reverseName } from "./upid.js";
@@ -54,6 +58,28 @@ let demoRequiredWei = 0n;
 
 const app = express();
 app.use(express.json());
+
+// Phase O §O3: the guardian NEVER receives key material on any endpoint —
+// onboarding sends only an address, two SIGNATURES, and a public key. This
+// middleware asserts it structurally: any request smuggling key-shaped fields
+// is rejected before any handler (and before anything could be logged).
+const FORBIDDEN_BODY_KEYS = ["privatekey", "private_key", "mnemonic", "seed", "seedphrase", "secret"];
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === "object") {
+    const walk = (o: unknown): boolean => {
+      if (!o || typeof o !== "object") return false;
+      for (const [k, v] of Object.entries(o)) {
+        if (FORBIDDEN_BODY_KEYS.includes(k.toLowerCase().replace(/[^a-z_]/g, ""))) return true;
+        if (walk(v)) return true;
+      }
+      return false;
+    };
+    if (walk(req.body)) {
+      return res.status(400).json({ error: "key material must never be sent to the guardian" });
+    }
+  }
+  next();
+});
 // CORS open to the app's localhost port (spec §2)
 app.use((req, res, next) => {
   res.setHeader("access-control-allow-origin", "*");
@@ -284,6 +310,163 @@ app.get("/card", async (req, res) => {
     res.json(await getCard(String(req.query.id ?? "")));
   } catch (e) {
     res.status(500).json({ error: String(e) });
+  }
+});
+
+// ---- POST /onboard (Phase O §O3) ----
+// Body: { address, authorization {address,chainId,nonce,r,s,yParity}, initSig {v,r,s}, passkey {x,y} }
+// ONE relayer-paid type-4 tx: delegate to v2 + initializeWithSig. The EOA needs
+// zero gas and its key never leaves the browser — only signatures arrive here.
+const onboardHits = new Map<string, number[]>();
+const ONBOARD_LIMIT = 10; // per IP per hour — testnet gas is real enough to protect
+
+app.post("/onboard", async (req, res) => {
+  try {
+    const ip = req.ip ?? "unknown";
+    const now = Date.now();
+    const hits = (onboardHits.get(ip) ?? []).filter((t) => now - t < 3_600_000);
+    if (hits.length >= ONBOARD_LIMIT) {
+      return res.status(429).json({ error: "rate limited — try again later" });
+    }
+    onboardHits.set(ip, [...hits, now]);
+
+    const { address, authorization, initSig, passkey } = req.body as {
+      address: Hex;
+      authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
+      initSig: { v: number; r: Hex; s: Hex };
+      passkey: { x: Hex; y: Hex };
+    };
+
+    // validate before spending relayer gas
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address ?? "")) {
+      return res.status(400).json({ error: "invalid address" });
+    }
+    const code = await publicClient.getCode({ address });
+    if (code && code !== "0x") {
+      return res.status(400).json({ error: "address already has code — onboarding is for fresh accounts" });
+    }
+    if (authorization.address.toLowerCase() !== ADDR.ondolAccountV2Impl.toLowerCase()) {
+      return res.status(400).json({ error: "authorization must target the OndolAccountV2 implementation" });
+    }
+    if (authorization.chainId !== giwaSepolia.id && authorization.chainId !== 0) {
+      return res.status(400).json({ error: "authorization chainId mismatch" });
+    }
+    if (authorization.nonce !== 0) {
+      return res.status(400).json({ error: "authorization nonce must be 0 (fresh EOA)" });
+    }
+
+    const txHash = await relayerWallet.sendTransaction({
+      to: address,
+      data: encodeFunctionData({
+        abi: ondolV2Abi,
+        functionName: "initializeWithSig",
+        args: [
+          passkey.x,
+          passkey.y,
+          ADDR.ondolTransferGuard,
+          ADDR.ariseModule,
+          initSig.v,
+          initSig.r,
+          initSig.s,
+        ],
+      }),
+      authorizationList: [
+        {
+          address: authorization.address,
+          chainId: authorization.chainId,
+          nonce: authorization.nonce,
+          r: authorization.r,
+          s: authorization.s,
+          yParity: authorization.yParity as 0 | 1,
+        },
+      ],
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    // Post-check with patience: right after inclusion, stale load-balanced
+    // nodes can still serve empty code (observed live) — the read THROWS on
+    // them, so retry with backoff instead of failing a successful onboarding.
+    let initialized = false;
+    for (let i = 0; i < 6 && !initialized; i++) {
+      try {
+        initialized = await publicClient.readContract({
+          address,
+          abi: ondolV2Abi,
+          functionName: "initialized",
+        });
+      } catch {
+        // stale node — retry
+      }
+      if (!initialized) await new Promise((r) => setTimeout(r, 800));
+    }
+    res.json({ status: receipt.status, txHash, explorer: explorerTx(txHash), initialized });
+  } catch (e) {
+    res.status(500).json({ error: String(e).slice(0, 400) });
+  }
+});
+
+// ---- POST /verify-me (Phase O §O4) ----
+// Returns the CALL PAYLOAD for Dojang faucet issuance; the app routes it through
+// the account's own execute() with a passkey signature. Excavation finding:
+// payAndIssueEAS() is permissionless and attests msg.sender — the ACCOUNT
+// performs its own verification; no guardian-triggered fallback needed.
+app.post("/verify-me", async (req, res) => {
+  try {
+    const { account } = req.body as { account: Hex };
+    const already = await verifiedBy(account);
+    if (already) return res.status(400).json({ error: "AlreadyVerified" });
+    const fee = await publicClient.readContract({
+      address: ADDR.faucetExtension,
+      abi: faucetExtensionAbi,
+      functionName: "fee",
+    });
+    res.json({
+      calls: [
+        {
+          target: ADDR.faucetExtension,
+          value: fee.toString(),
+          data: encodeFunctionData({ abi: faucetExtensionAbi, functionName: "payAndIssueEAS" }),
+        },
+      ],
+      feeWei: fee.toString(),
+      attester: "TESTNET FAUCET",
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e).slice(0, 300) });
+  }
+});
+
+// ---- POST /claim-name (Phase O §O4) ----
+// Availability check + register(label) payload. The name claim MUST come from
+// the account itself (register assigns to msg.sender) — payload only, the app
+// executes it passkey-signed.
+app.post("/claim-name", async (req, res) => {
+  try {
+    const { account, label } = req.body as { account: Hex; label: string };
+    const clean = (label ?? "").toLowerCase().trim();
+    if (!/^[a-z0-9-]{3,32}$/.test(clean)) {
+      return res.status(400).json({ error: "InvalidLabel" });
+    }
+    const existing = await reverseName(account);
+    if (existing) return res.status(400).json({ error: "AlreadyNamed" });
+    const claimable = await publicClient.readContract({
+      address: ADDR.upnameRegistry,
+      abi: upnameRegistryAbi,
+      functionName: "isClaimable",
+      args: [clean],
+    });
+    if (!claimable) return res.status(400).json({ error: "NameTaken" });
+    res.json({
+      calls: [
+        {
+          target: ADDR.upnameRegistry,
+          value: "0",
+          data: encodeFunctionData({ abi: registerAbi, functionName: "register", args: [clean] }),
+        },
+      ],
+      label: clean,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e).slice(0, 300) });
   }
 });
 

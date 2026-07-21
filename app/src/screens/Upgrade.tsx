@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, type Status } from "../api";
 import { createPasskey } from "../webauthn";
-import { DEMO_ACCOUNT, EXPLORER, LS_CREDENTIAL } from "../config";
+import { DEMO_ACCOUNT, EXPLORER, isLegacyDemo, LS_CREDENTIAL } from "../config";
 import { Seal, Spinner, shortAddr } from "../ui";
 
 /** R5: no screen is a single element in a void — success is a two-col
@@ -101,7 +101,7 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
                   0xef0100… (view on explorer)
                 </a>
               </p>
-              {!hasCredential && !result && (
+              {!hasCredential && !result && isLegacyDemo() && (
                 <button className="primary wide" onClick={linkExisting} disabled={!!busy}>
                   {busy ?? "Use this device's passkey"}
                 </button>

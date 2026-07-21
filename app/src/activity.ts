@@ -1,6 +1,6 @@
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { api } from "./api";
-import { DEMO_ACCOUNT, EAS_ADDRESS, EXPLORER } from "./config";
+import { activeAccount, EAS_ADDRESS, EXPLORER } from "./config";
 
 /** Activity feed (R2): the wallet's real transactions, read straight from the
  *  explorer API in the browser (CORS `*` verified) — presentation-only data,
@@ -53,18 +53,19 @@ async function identify(addr: Hex): Promise<{ name: string | null; verified: boo
   }
 }
 
-let cache: { items: ActivityItem[]; at: number } | null = null;
+let cache: { items: ActivityItem[]; at: number; account: string } | null = null;
 
 export async function fetchActivity(): Promise<ActivityItem[]> {
-  if (cache && Date.now() - cache.at < 30_000) return cache.items;
+  const account = activeAccount();
+  if (cache && cache.account === account && Date.now() - cache.at < 30_000) return cache.items;
 
   const res = await fetch(
-    `https://sepolia-explorer.giwa.io/api/v2/addresses/${DEMO_ACCOUNT}/transactions`,
+    `https://sepolia-explorer.giwa.io/api/v2/addresses/${account}/transactions`,
   );
   if (!res.ok) throw new Error(`explorer ${res.status}`);
   const { items } = (await res.json()) as { items: ExplorerTx[] };
 
-  const acct = DEMO_ACCOUNT.toLowerCase();
+  const acct = account.toLowerCase();
   const out: ActivityItem[] = [];
   for (const tx of items.slice(0, 20)) {
     const to = tx.to?.hash.toLowerCase() ?? "";
@@ -128,6 +129,6 @@ export async function fetchActivity(): Promise<ActivityItem[]> {
     // everything else (0-value self test txs, deploys) stays out of the feed
   }
 
-  cache = { items: out.slice(0, 10), at: Date.now() };
+  cache = { items: out.slice(0, 10), at: Date.now(), account };
   return cache.items;
 }

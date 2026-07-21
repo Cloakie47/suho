@@ -20,6 +20,9 @@ export const ADDR = {
   eas: "0x4200000000000000000000000000000000000021" as `0x${string}`,
   // UpnameRegistry proxy ("Upbit Web3 Names") — probe C, binding note 1.
   upnameRegistry: "0x091D00004f21eb2Fc30964A8a4995692d9b49628" as `0x${string}`,
+  // GIWAFaucetExtension — the TESTNET FAUCET attester itself (Phase O §O4
+  // excavation): payAndIssueEAS() is permissionless+payable, recipient = caller.
+  faucetExtension: "0x63CCe2b569A7bC35895ee24306c1512fefc06121" as `0x${string}`,
 } as const;
 
 // Suho Card schema (C1): registered 2026-07-21, block 31278333.
@@ -88,6 +91,20 @@ export const ondolAccountAbi = parseAbi([
   "error CodeExpired()",
   "error CodeAlreadyUsed()",
 ]);
+
+export const ondolV2Abi = parseAbi([
+  "function initializeWithSig(bytes32 x, bytes32 y, address guard_, address arise_, uint8 v, bytes32 r, bytes32 s)",
+  "function initialized() view returns (bool)",
+  "error AlreadyInitialized()",
+  "error InvalidInitSignature()",
+]);
+
+export const faucetExtensionAbi = parseAbi([
+  "function payAndIssueEAS() payable",
+  "function fee() view returns (uint256)",
+]);
+
+export const registerAbi = parseAbi(["function register(string name)"]);
 
 export const DELEGATION_PREFIX = "0xef0100";
 export const explorerTx = (hash: string) => `https://sepolia-explorer.giwa.io/tx/${hash}`;
