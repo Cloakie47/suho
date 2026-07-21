@@ -1,0 +1,118 @@
+:root {
+  --bg: #1b1917;
+  --panel: #26221f;
+  --panel-2: #2f2a26;
+  --line: #3a342f;
+  --text: #ede7e0;
+  --muted: #a89f95;
+  --accent: #e4572e;
+  --accent-dim: #b8451f;
+  --ok: #6fbf73;
+  --warn: #e0a83c;
+  --danger: #d9534f;
+  --seal: #c0392b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root { display: flex; justify-content: center; min-height: 100vh; }
+
+.column { width: 480px; max-width: 96vw; padding: 24px 0 64px; }
+
+.topbar {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 8px 4px 16px;
+}
+.brand { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.02em; }
+.brand .hanja { color: var(--accent); margin-left: 8px; font-size: 1.1rem; }
+.nav button {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 0.95rem; padding: 4px 10px;
+}
+.nav button.active { color: var(--accent); }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 20px; margin-bottom: 16px;
+}
+.card h2 { margin: 0 0 12px; font-size: 1.15rem; }
+.muted { color: var(--muted); font-size: 0.9rem; }
+.mono { font-family: Consolas, monospace; font-size: 0.85rem; word-break: break-all; }
+
+.tile-divider { display: block; margin: 4px auto 20px; opacity: 0.8; }
+
+.balance { font-size: 2.2rem; font-weight: 600; margin: 4px 0 2px; }
+.balance small { font-size: 1rem; color: var(--muted); font-weight: 400; }
+
+.seal {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; height: 34px; padding: 0 6px;
+  border: 2.5px solid var(--seal); border-radius: 7px; color: var(--seal);
+  font-family: "Batang", "Malgun Gothic", serif; font-weight: 700; font-size: 0.95rem;
+  transform: rotate(-6deg);
+  box-shadow: inset 0 0 6px rgba(192, 57, 43, 0.35);
+  user-select: none;
+}
+.seal.small { min-width: 26px; height: 26px; font-size: 0.75rem; border-width: 2px; }
+
+input[type="text"], input[type="number"] {
+  width: 100%; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  font-size: 1rem; outline: none;
+}
+input:focus { border-color: var(--accent-dim); }
+
+button.primary {
+  width: 100%; padding: 14px; border: none; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 1.05rem; font-weight: 600;
+  cursor: pointer; margin-top: 12px;
+}
+button.primary:disabled { background: var(--panel-2); color: var(--muted); cursor: default; }
+button.secondary {
+  width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: none; color: var(--text); font-size: 0.95rem; cursor: pointer; margin-top: 10px;
+}
+button.danger-outline { border-color: var(--danger); color: var(--danger); }
+
+.recipient-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel-2); border-radius: 10px; padding: 12px 14px; margin-top: 10px;
+  border: 1px solid var(--line);
+}
+.recipient-card.verified { border-color: rgba(111, 191, 115, 0.4); }
+.recipient-card.unverified { border-color: rgba(224, 168, 60, 0.55); }
+.recipient-card .name { font-weight: 600; }
+
+.warnbox {
+  color: var(--warn); font-size: 0.88rem; margin-top: 8px; line-height: 1.4;
+}
+.okbox { color: var(--ok); font-size: 0.9rem; margin-top: 8px; }
+.errbox { color: var(--danger); font-size: 0.9rem; margin-top: 8px; word-break: break-all; }
+
+.status-line { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.95rem; }
+.spinner {
+  width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.timing { color: var(--ok); font-weight: 600; }
+.otp-input {
+  font-size: 1.8rem; letter-spacing: 0.5em; text-align: center; font-family: Consolas, monospace;
+}
+.countdown { text-align: center; color: var(--muted); margin-top: 8px; font-size: 0.85rem; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.big-check { font-size: 2.6rem; text-align: center; color: var(--ok); margin: 10px 0 4px; }
+.center { text-align: center; }
+.hero { font-size: 1.3rem; font-weight: 600; text-align: center; margin: 8px 0; }

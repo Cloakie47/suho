@@ -14,3 +14,7 @@ node_modules/
 
 # Local tool settings
 .claude/settings.local.json
+
+# Probe scratch (keep the webauthn probe: guardian /demo-credential reads it)
+probe-tmp/*
+!probe-tmp/webauthn/

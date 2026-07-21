@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Suho — WebAuthn Probe E</title>
+<style>
+  body { font-family: system-ui; background: #1c1b1a; color: #eee; display: grid; place-items: center; min-height: 95vh; }
+  main { max-width: 480px; text-align: center; }
+  button { font-size: 1.3rem; padding: 1rem 2rem; border-radius: 10px; border: 0; background: #e4572e; color: #fff; cursor: pointer; margin-top: 1rem; }
+  pre { text-align: left; background: #2a2827; padding: 1rem; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: .75rem; }
+</style></head>
+<body>
+<main>
+  <h1>Probe E — WebAuthn / Windows Hello</h1>
+  <p>Click, complete the Windows Hello prompt twice (create, then assert).</p>
+  <button id="go">Create passkey &amp; assert</button>
+  <pre id="out">waiting…</pre>
+</main>
+<script>
+const out = document.getElementById('out');
+const log = (s) => { out.textContent += "\n" + s; };
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+document.getElementById('go').onclick = async () => {
+  out.textContent = "starting…";
+  const result = { userAgent: navigator.userAgent };
+  try {
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: "Suho Probe", id: "localhost" },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "probe@suho", displayName: "Suho Probe" },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }],   // ES256 (P-256) only
+      authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+      timeout: 60000,
+    }});
+    result.credentialId = cred.id;
+    result.algorithm = cred.response.getPublicKeyAlgorithm();          // -7 == ES256/P-256
+    result.publicKeySpkiB64 = b64(cred.response.getPublicKey());       // DER SPKI
+    result.authenticatorAttachment = cred.authenticatorAttachment;
+    log("create OK — alg " + result.algorithm + " (expect -7 = ES256/P-256)");
+    log("credentialId: " + cred.id);
+
+    const assertion = await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rpId: "localhost",
+      allowCredentials: [{ type: "public-key", id: cred.rawId }],
+      userVerification: "required",
+      timeout: 60000,
+    }});
+    result.assertionOk = true;
+    result.assertionSignatureB64 = b64(assertion.response.signature);
+    log("get/assert OK — signature " + assertion.response.signature.byteLength + " bytes (DER ECDSA)");
+    result.ok = true;
+  } catch (e) {
+    result.ok = false;
+    result.error = String(e);
+    log("FAILED: " + e);
+  }
+  await fetch("/result", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(result) });
+  log(result.ok ? "\nPROBE E PASS — result logged. You can close this tab." : "\nresult logged (failure).");
+};
+</script>
+</body>
+</html>
