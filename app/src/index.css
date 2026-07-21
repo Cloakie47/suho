@@ -90,6 +90,28 @@ body {
   font-size: 0.8rem; margin-left: 10px; padding: 0;
 }
 
+/* Suho Card (C4) */
+.vcard {
+  background: linear-gradient(150deg, #2d2825 0%, #221e1b 65%, #26201c 100%);
+  border: 1px solid var(--accent-dim);
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+.vcard-head { display: flex; align-items: center; gap: 14px; }
+.vcard-head > div { flex: 1; }
+.vcard-name { font-size: 1.35rem; font-weight: 700; }
+.vcard-upid { color: var(--accent); font-size: 0.95rem; }
+.vcard-qr { border-radius: 8px; }
+.vcard-fields { margin: 16px 0 10px; display: grid; gap: 6px; font-size: 0.95rem; }
+.vcard-label {
+  display: inline-block; min-width: 70px; color: var(--muted);
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.vcard-meta { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 10px; }
+.vcard-honesty { color: var(--muted); font-size: 0.72rem; margin-top: 8px; font-style: italic; }
+
 input[type="text"], input[type="number"] {
   width: 100%; padding: 12px 14px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--panel-2); color: var(--text);

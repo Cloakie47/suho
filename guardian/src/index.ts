@@ -34,6 +34,7 @@ import { resolveName, reverseName } from "./upid.js";
 import { encodeWebAuthnSig, spkiToXY, type BrowserAssertion } from "./webauthn.js";
 import { printCodeBanner } from "./banner.js";
 import { getDirectory, prewarmDirectory } from "./directory.js";
+import { getCard } from "./card.js";
 
 // P4: demo readiness — alice must cover one verified send (0.0002) plus one OTP
 // send at threshold+0.001, with 30% margin. Execute gas is relayer-paid, so only
@@ -267,6 +268,16 @@ app.post("/otp/request", async (req, res) => {
 app.get("/directory", async (req, res) => {
   try {
     res.json(await getDirectory(String(req.query.q ?? ""), req.query.refresh === "1"));
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ---- GET /card?id=<address-or-uid> ----
+// C4/C5: current card + refUID version history for an account (or a card uid).
+app.get("/card", async (req, res) => {
+  try {
+    res.json(await getCard(String(req.query.id ?? "")));
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }

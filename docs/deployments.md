@@ -15,6 +15,12 @@ Suho code schema UID (registered on the SchemaRegistry predeploy, resolver 0,
 revocable): `0x8f05c451eccf1fe63ba0518ad1f3338b92b7516eec60ea8ea9e528b20e49a3cf`
 — schema `bytes32 codeHash, string domain`.
 
+Suho Card schema UID (registered 2026-07-21, block 31278333, resolver 0,
+revocable): `0x1eb6f3a6fefafeb323d44868d7c4c97ee64c981d9c47c5f028154a29dba0bdaa`
+— schema `string displayName, string contact, string remarks`. Card
+attestations are self-attested by the Ondol account via execute() (passkey-
+signed); versions chain through refUID, updates revoke the prior version.
+
 Config: guard `otpThreshold` = 0.01 ether; accepted attester IDs from
 `DojangConfig` (TESTNET FAUCET first, UPBIT KOREA second).
 

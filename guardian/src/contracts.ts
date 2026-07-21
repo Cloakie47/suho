@@ -16,9 +16,20 @@ export const ADDR = {
   ondolAccountImpl: deployments.ondolAccountImpl as `0x${string}`,
   // GIWA-official contracts (mirrors contracts/src/DojangConfig.sol)
   dojangScroll: "0xd5077b67dcb56caC8b270C7788FC3E6ee03F17B9" as `0x${string}`,
+  eas: "0x4200000000000000000000000000000000000021" as `0x${string}`,
   // UpnameRegistry proxy ("Upbit Web3 Names") — probe C, binding note 1.
   upnameRegistry: "0x091D00004f21eb2Fc30964A8a4995692d9b49628" as `0x${string}`,
 } as const;
+
+// Suho Card schema (C1): registered 2026-07-21, block 31278333.
+export const CARD_SCHEMA_UID = deployments.suhoCardSchemaUid as `0x${string}`;
+export const CARD_ERA_START = 31_278_333n;
+
+export const easAbi = parseAbi([
+  "event Attested(address indexed recipient, address indexed attester, bytes32 uid, bytes32 indexed schemaUID)",
+  "struct Attestation { bytes32 uid; bytes32 schema; uint64 time; uint64 expirationTime; uint64 revocationTime; bytes32 refUID; address recipient; address attester; bool revocable; bytes data; }",
+  "function getAttestation(bytes32 uid) view returns (Attestation)",
+]);
 
 // Accepted attester IDs, TESTNET FAUCET first (mirrors DojangConfig.acceptedAttesterIds()).
 export const ATTESTER_IDS: { name: string; id: `0x${string}` }[] = [
