@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { api, GuardianError, type CardInfo, type Status } from "../api";
 import { buildCardCalls, type CardFields } from "../card";
 import { executeWithPasskey } from "../execute";
-import { DEMO_ACCOUNT, EXPLORER } from "../config";
-import { Spinner, TileDivider, shortAddr } from "../ui";
+import { DEMO_ACCOUNT } from "../config";
+import { Spinner, shortAddr } from "../ui";
 import { VCard, CardHistory } from "../vcard";
 import { useToast, type TxToast } from "../toast";
 
@@ -17,7 +17,6 @@ type Phase =
 export function Card({ status }: { status: Status }) {
   const [info, setInfo] = useState<CardInfo | null>(null);
   const [editing, setEditing] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [fields, setFields] = useState<CardFields>({ displayName: "", contact: "", remarks: "" });
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
   const toast = useToast();
@@ -49,6 +48,7 @@ export function Card({ status }: { status: Status }) {
         },
         preconf: (ms) => h.t?.preconfirmed(creating ? "Card v1 created" : `Updated to v${nextV}`, ms),
         final: (hash) => h.t?.final(hash),
+        reverted: () => h.t?.error(new Error("TransactionReverted")),
       });
       setPhase({ k: "idle" });
       setEditing(false);
@@ -74,105 +74,127 @@ export function Card({ status }: { status: Status }) {
     setEditing(true);
   };
 
-  if (!info) {
-    return (
-      <div className="status-line">
-        <Spinner /> loading card…
-      </div>
-    );
-  }
-
   return (
     <div>
-      {info.current && !editing && (
-        <>
-          <VCard
-            card={info.current}
-            address={DEMO_ACCOUNT}
-            upId={status.upId}
-            verified={status.isVerified}
-          />
-          <div className="card center">
-            <button className="primary" onClick={startEdit}>
-              Edit card
-            </button>
-            <button className="secondary" onClick={() => setShowHistory((s) => !s)}>
-              {showHistory ? "Hide history" : `History (${info.history.length} version${info.history.length > 1 ? "s" : ""})`}
-            </button>
-            <div className="muted" style={{ marginTop: 10, fontSize: "0.8rem" }}>
-              Share the read-only view:{" "}
-              <a href={`#/verify/${DEMO_ACCOUNT}`} target="_blank">
-                /verify/{shortAddr(DEMO_ACCOUNT)}
-              </a>
-            </div>
-          </div>
-          {showHistory && <CardHistory history={info.history} />}
-        </>
-      )}
+      <div className="screen-head">
+        <p className="eyebrow">ATTESTED IDENTITY</p>
+        <h1 className="screen-title">Suho Card</h1>
+      </div>
 
-      {!info.current && !editing && (
-        <div className="card center">
-          <div className="hero">Your Suho Card</div>
-          <p className="muted">
-            An attested identity card, signed by your passkey and living on EAS. The seal attests
-            the human; the fields are your claims.
-          </p>
-          <button className="primary" onClick={startEdit}>
-            Create your card
-          </button>
-        </div>
-      )}
-
-      {editing && (
-        <div className="card">
-          <h2>{info.current ? `Edit card (creates v${(info.current.version ?? 0) + 1})` : "Create your card (v1)"}</h2>
-          <div style={{ display: "grid", gap: 10 }}>
-            <input
-              type="text"
-              placeholder="Display name"
-              value={fields.displayName}
-              onChange={(e) => setFields({ ...fields, displayName: e.target.value })}
-            />
-            <input
-              type="text"
-              placeholder="Contact (e.g. @handle or email)"
-              value={fields.contact}
-              onChange={(e) => setFields({ ...fields, contact: e.target.value })}
-            />
-            <input
-              type="text"
-              placeholder="Remarks"
-              value={fields.remarks}
-              onChange={(e) => setFields({ ...fields, remarks: e.target.value })}
-            />
-          </div>
-          {info.current && (
-            <div className="muted" style={{ marginTop: 8, fontSize: "0.8rem" }}>
-              One passkey signature attests the new version and revokes v{info.current.version}{" "}
-              atomically. Nothing is deleted — the history stays walkable.
-            </div>
-          )}
-          <button
-            className="primary"
-            disabled={!fields.displayName || phase.k === "signing"}
-            onClick={submit}
-          >
-            {info.current ? "Sign & update" : "Sign & create"}
-          </button>
-          <button className="secondary" onClick={() => setEditing(false)}>
-            Cancel
-          </button>
-        </div>
-      )}
-
-      <TileDivider />
-
-      {phase.k === "signing" && (
+      {!info ? (
         <div className="status-line">
-          <Spinner /> Confirm with your passkey…
+          <Spinner /> loading card…
+        </div>
+      ) : (
+        <div className="card-layout">
+          <div>
+            {info.current ? (
+              <>
+                <VCard
+                  card={info.current}
+                  address={DEMO_ACCOUNT}
+                  upId={status.upId}
+                  verified={status.isVerified}
+                />
+                {!editing && (
+                  <div className="card hover" style={{ marginTop: 16 }}>
+                    <button className="primary wide" style={{ marginTop: 0 }} onClick={startEdit}>
+                      Edit card
+                    </button>
+                    <div className="muted" style={{ marginTop: 10, fontSize: "0.8rem" }}>
+                      Share the read-only view:{" "}
+                      <a href={`#/verify/${DEMO_ACCOUNT}`} target="_blank">
+                        /verify/{shortAddr(DEMO_ACCOUNT)}
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              !editing && (
+                <div className="card center">
+                  <div className="hero">Your Suho Card</div>
+                  <p className="muted">
+                    An attested identity card, signed by your passkey and living on EAS. The seal
+                    attests the human; the fields are your claims.
+                  </p>
+                  <button className="primary wide" onClick={startEdit}>
+                    Create your card
+                  </button>
+                </div>
+              )
+            )}
+
+            {editing && (
+              <div className="card" style={{ marginTop: info.current ? 16 : 0 }}>
+                <h2>
+                  {info.current
+                    ? `Edit card (creates v${(info.current.version ?? 0) + 1})`
+                    : "Create your card (v1)"}
+                </h2>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <input
+                    type="text"
+                    placeholder="Display name"
+                    value={fields.displayName}
+                    onChange={(e) => setFields({ ...fields, displayName: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Contact (e.g. @handle or email)"
+                    value={fields.contact}
+                    onChange={(e) => setFields({ ...fields, contact: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Remarks"
+                    value={fields.remarks}
+                    onChange={(e) => setFields({ ...fields, remarks: e.target.value })}
+                  />
+                </div>
+                {info.current && (
+                  <div className="muted" style={{ marginTop: 8, fontSize: "0.8rem" }}>
+                    One passkey signature attests the new version and revokes v
+                    {info.current.version} atomically. Nothing is deleted — the history stays
+                    walkable.
+                  </div>
+                )}
+                <button
+                  className="primary wide"
+                  disabled={!fields.displayName || phase.k === "signing"}
+                  onClick={submit}
+                >
+                  {info.current ? "Sign & update" : "Sign & create"}
+                </button>
+                <button className="secondary" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {phase.k === "signing" && (
+              <div className="status-line">
+                <Spinner /> Confirm with your passkey…
+              </div>
+            )}
+            {phase.k === "error" && <div className="errbox">{phase.message}</div>}
+          </div>
+
+          <div>
+            {info.history.length > 0 ? (
+              <CardHistory history={info.history} />
+            ) : (
+              <div className="card">
+                <h2>Versions</h2>
+                <p className="muted">
+                  Every edit becomes a new attested version; the refUID chain is the history. Nothing
+                  is ever deleted.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
-      {phase.k === "error" && <div className="errbox">{phase.message}</div>}
     </div>
   );
 }

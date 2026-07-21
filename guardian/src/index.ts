@@ -89,9 +89,11 @@ app.get("/status", async (req, res) => {
       flashClient.getBalance({ address }), // Flashblocks-fresh
       publicClient.getCode({ address }),
     ]);
-    const isOndol =
-      !!code &&
-      code.toLowerCase() === (DELEGATION_PREFIX + ADDR.ondolAccountImpl.slice(2)).toLowerCase();
+    // v1 and v2 are both our implementations (v2 = current, v1 = superseded).
+    const ours = [ADDR.ondolAccountV2Impl, ADDR.ondolAccountImpl].map(
+      (impl) => (DELEGATION_PREFIX + impl.slice(2)).toLowerCase(),
+    );
+    const isOndol = !!code && ours.includes(code.toLowerCase());
     let initialized = false;
     let accountNonce = "0";
     if (isOndol) {
@@ -152,7 +154,9 @@ app.post("/upgrade", async (req, res) => {
     const code = await publicClient.getCode({ address });
     const alreadyDelegated =
       !!code &&
-      code.toLowerCase() === (DELEGATION_PREFIX + ADDR.ondolAccountImpl.slice(2)).toLowerCase();
+      [ADDR.ondolAccountV2Impl, ADDR.ondolAccountImpl]
+        .map((impl) => (DELEGATION_PREFIX + impl.slice(2)).toLowerCase())
+        .includes(code.toLowerCase());
     if (alreadyDelegated) {
       const initialized = await publicClient.readContract({
         address, abi: ondolAccountAbi, functionName: "initialized",

@@ -9,7 +9,8 @@ and executed without incident. Deployer/issuer key: `DEPLOYER_*` in `.env`
 | SuhoCodeAttester | `0x88645529532844C380b40AB68E335CC7a8a0f63B` | [view](https://sepolia-explorer.giwa.io/address/0x88645529532844C380b40AB68E335CC7a8a0f63B) | ✅ 2026-07-21 (Blockscout, Pass) |
 | OndolTransferGuard | `0x106953DB14B1183378976E128AE5cd40C4b493d2` | [view](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) | ✅ 2026-07-21 (Blockscout, Pass) |
 | AriseModule | `0x827375200CF4595f71b09497A65BAF10Ca907466` | [view](https://sepolia-explorer.giwa.io/address/0x827375200CF4595f71b09497A65BAF10Ca907466) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolAccount (impl) | `0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4` | [view](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) | ✅ 2026-07-21 (Blockscout, Pass) |
+| OndolAccount (impl, v1 — superseded) | `0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4` | [view](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) | ✅ 2026-07-21 (Blockscout, Pass) |
+| OndolAccountV2 (impl — current) | `0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69` | [view](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) | ✅ 2026-07-21 (Blockscout, Pass) |
 
 Suho code schema UID (registered on the SchemaRegistry predeploy, resolver 0,
 revocable): `0x8f05c451eccf1fe63ba0518ad1f3338b92b7516eec60ea8ea9e528b20e49a3cf`
@@ -28,5 +29,9 @@ Post-deploy smoke test (live, both txs status 1): issued a throwaway code to
 alice under domain `suho.test:roundtrip-1`, `isCodeActive` true, then
 `verifyAndConsume` consumed it, `isCodeActive` false.
 
-Note: the OndolAccount implementation is deployed but NO wallet is 7702-delegated
-to it yet — that happens in the app phase.
+Phase O (2026-07-21): OndolAccountV2 replaces the self-call-gated initialize
+with EIP-712 signature-gated `initializeWithSig` (low-s enforced) so a relayer
+can initialize a gasless fresh account; storage namespace is identical to v1,
+so v1-initialized accounts re-delegate to v2 with no re-initialization. v1
+remains deployed and source-verified as superseded. New onboarding always
+delegates to v2.

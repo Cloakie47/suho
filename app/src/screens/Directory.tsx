@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { api, type DirEntry } from "../api";
 import { DEMO_ACCOUNT } from "../config";
-import { Seal, Spinner, TileDivider, shortAddr } from "../ui";
+import { Seal, Spinner, shortAddr } from "../ui";
 
-/// D2: the directory IS the trust surface — only active, Dojang-gated names can
-/// appear (guardian enforces it by construction; nothing unverified renders).
-/// Search is server-side: the in-window registry holds tens of thousands of
-/// names, so the guardian filters and caps at 500 rows per query.
+/// D2 under the R5 composition pass: table-like rows, sticky search, count
+/// header. Trust surface unchanged — only active, Dojang-gated names render.
 export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void }) {
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -35,7 +34,6 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
     load("");
   }, []);
 
-  // 300ms debounce, same rhythm as the Send screen's resolver.
   useEffect(() => {
     window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => load(q), 300);
@@ -44,21 +42,27 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
 
   return (
     <div>
-      <div className="card">
-        <h2>Directory</h2>
-        <p className="muted">
-          Every entry is a verified human with an active up.id — unverified addresses cannot appear
-          here.
+      <div className="screen-head">
+        <p className="eyebrow">
+          <span className="ko" lang="ko">지붕 아래</span> · VERIFIED HUMANS
         </p>
+        <div className="dir-head-row">
+          <h1 className="screen-title">Directory</h1>
+          <span className="dir-count">
+            {total > 0 ? `${total.toLocaleString()} verified names` : ""}
+          </span>
+        </div>
+      </div>
+
+      <div className="dir-search">
         <input
           type="text"
           placeholder="Search name or address"
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          aria-label="Search directory"
         />
       </div>
-
-      <TileDivider />
 
       {!entries && !error && (
         <div className="status-line">
@@ -68,17 +72,11 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
       {error && <div className="errbox">{error}</div>}
 
       {entries && (
-        <div className="card">
-          <div className="muted" style={{ marginBottom: 8 }}>
-            {shown} shown · {total} verified names in the demo era
-            {busy && <span> · searching…</span>}
-            <button
-              className="dir-refresh"
-              onClick={() => load(q, true)}
-              disabled={busy}
-              title="Rescan the chain and re-check every name against the live registry"
-            >
-              refresh
+        <div className="card dir-table">
+          <div className="muted" style={{ padding: "12px 0 6px", display: "flex", alignItems: "center" }}>
+            {shown} shown{busy && <span>&nbsp;· searching…</span>}
+            <button className="dir-refresh" onClick={() => load(q, true)} disabled={busy} title="Rescan the chain and re-check every name">
+              <RefreshCw size={12} strokeWidth={1.5} style={{ verticalAlign: "-2px" }} /> refresh
             </button>
           </div>
           {entries.map((e) => {
@@ -90,14 +88,16 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
                   {e.name}.up.id
                   {isSelf && <span className="you-marker"> · you</span>}
                 </div>
-                <div className="muted mono">{shortAddr(e.address)}</div>
+                <div className="dir-addr">{shortAddr(e.address)}</div>
                 <button className="dir-send" onClick={() => onSendTo(e.name)} disabled={isSelf}>
                   Send
                 </button>
               </div>
             );
           })}
-          {entries.length === 0 && <div className="muted">No names match “{q}”.</div>}
+          {entries.length === 0 && (
+            <div className="muted" style={{ padding: "10px 0 16px" }}>No names match “{q}”.</div>
+          )}
         </div>
       )}
     </div>

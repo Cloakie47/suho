@@ -55,7 +55,7 @@ export function computeChallenge(account: Hex, nonce: bigint, calls: Call[]): He
 export async function watchReceipt(
   hash: Hex,
   t0: number,
-  on?: { preconf?: (ms: number) => void; final?: (ms: number) => void },
+  on?: { preconf?: (ms: number) => void; final?: (ms: number) => void; reverted?: () => void },
 ): Promise<{ preconfMs: number; inclusionMs: number; status: string }> {
   let preconfMs = 0;
   let inclusionMs = 0;
@@ -70,10 +70,20 @@ export async function watchReceipt(
     if (preconfMs === 0 && rf) {
       preconfMs = Math.round(now - t0);
       status = rf.status;
+      // A mined-but-reverted tx must never toast success.
+      if (rf.status !== "success") {
+        on?.reverted?.();
+        return { preconfMs, inclusionMs, status };
+      }
       on?.preconf?.(preconfMs);
     }
     if (inclusionMs === 0 && rn) {
       inclusionMs = Math.round(now - t0);
+      if (rn.status !== "success") {
+        status = rn.status;
+        on?.reverted?.();
+        return { preconfMs, inclusionMs, status };
+      }
       on?.final?.(inclusionMs);
     }
     await new Promise((r) => setTimeout(r, 50));

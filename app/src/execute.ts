@@ -10,6 +10,7 @@ export interface ExecuteHooks {
   sent?(txHash: Hex): void;
   preconf?(ms: number): void;
   final?(txHash: Hex, inclusionMs: number): void;
+  reverted?(txHash: Hex): void;
 }
 
 /** Shared passkey-authorized execute: sign over (account, chain, nonce, calls),
@@ -35,6 +36,7 @@ export async function executeWithPasskey(
   const timing = await watchReceipt(txHash, t0, {
     preconf: (ms) => hooks?.preconf?.(ms),
     final: (ms) => hooks?.final?.(txHash, ms),
+    reverted: () => hooks?.reverted?.(txHash),
   });
   return { txHash, preconfMs: timing.preconfMs };
 }

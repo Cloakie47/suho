@@ -4,19 +4,31 @@ import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
 import { DEMO_ACCOUNT, EXPLORER, LS_CREDENTIAL } from "../config";
-import { Spinner, TileDivider, shortAddr } from "../ui";
+import { Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
+import { recordSend } from "../stats";
 
 type Stage =
   | { k: "intro" }
   | { k: "created"; key: PasskeyInfo }
-  | { k: "code-sent"; key: PasskeyInfo; expiresAt: number; error?: string }
+  | { k: "code-sent"; key: PasskeyInfo; expiresAt: number }
   | { k: "arisen"; key: PasskeyInfo; txHash: Hex; ms: number }
   | { k: "error"; message: string };
 
 interface ProofState {
   old?: { ok: boolean; detail: string };
   fresh?: { ok: boolean; detail: string; ms?: number };
+}
+
+/** R5: recovery really is a sequence — the numbered rail earns its place. */
+const STEPS = ["New passkey", "Request code", "Enter code & arise"];
+
+function stepState(stage: Stage, i: number): "done" | "active" | "todo" {
+  const current = stage.k === "intro" ? 0 : stage.k === "created" ? 1 : stage.k === "code-sent" ? 2 : 3;
+  if (stage.k === "arisen") return "done";
+  if (i < current) return "done";
+  if (i === current) return "active";
+  return "todo";
 }
 
 export function Arise({ status, refresh }: { status: Status; refresh: () => void }) {
@@ -74,6 +86,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
       const timing = await watchReceipt(r.txHash, t0, {
         preconf: (ms) => handle.preconfirmed("You have risen", ms),
         final: () => handle.final(r.txHash),
+        reverted: () => handle.error(new Error("TransactionReverted")),
       });
       localStorage.setItem(LS_CREDENTIAL, key.credentialId);
       setStage({ k: "arisen", key, txHash: r.txHash, ms: timing.preconfMs });
@@ -107,12 +120,14 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
       const timing = await watchReceipt(txHash, t0, {
         preconf: (ms) => h.preconfirmed("Sent", ms),
         final: () => h.final(txHash),
+        reverted: () => h.error(new Error("TransactionReverted")),
       });
+      recordSend(txHash, timing.preconfMs);
       setProof((p) => ({
         ...p,
         [label]: {
           ok: true,
-          detail: `sent — ${shortAddr(txHash)} (${timing.preconfMs}ms)`,
+          detail: `sent — ${shortAddr(txHash)} (${(timing.preconfMs / 1000).toFixed(1)}s)`,
           ms: timing.preconfMs,
         },
       }));
@@ -130,121 +145,177 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
 
   return (
     <div>
-      <div className="card center">
-        <div className="hero">Lost your device?</div>
-        <p className="muted">
-          Arise rotates your account to a new passkey — same address, same name — authorized only by
-          a single-use verification code bound to this exact recovery.
-        </p>
+      <div className="screen-head">
+        <p className="eyebrow">RECOVERY</p>
+        <h1 className="screen-title">Arise</h1>
       </div>
 
-      <TileDivider />
-
-      {stage.k === "intro" && (
-        <div className="card center">
-          <p className="muted">Step 1 — create a passkey on the “new device”.</p>
-          <button className="primary" onClick={createNew} disabled={!!busy}>
-            Create new passkey
-          </button>
-        </div>
-      )}
-
-      {stage.k === "created" && (
-        <div className="card center">
-          <p className="okbox">✓ New passkey minted (P-256).</p>
-          <p className="mono muted">x: {stage.key.x.slice(0, 22)}…</p>
-          <p className="muted">Step 2 — request the recovery code.</p>
-          <button className="primary" onClick={() => requestCode(stage.key)} disabled={!!busy}>
-            Request recovery code
-          </button>
-        </div>
-      )}
-
-      {stage.k === "code-sent" && (
-        <div className="card">
-          <h2>Enter recovery code</h2>
-          <p className="muted">
-            Read the 6-digit code from the Upbit Verification Service terminal.
-          </p>
-          <input
-            type="text"
-            className="otp-input"
-            maxLength={6}
-            inputMode="numeric"
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          />
-          <div className="countdown">
-            {countdown > 0
-              ? `code expires in ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, "0")}`
-              : "code expired — go back and request a new one"}
-          </div>
-          <button
-            className="primary"
-            disabled={code.length !== 6 || countdown === 0 || !!busy}
-            onClick={() => complete(stage.key)}
-          >
-            Arise
-          </button>
-        </div>
-      )}
-
-      {stage.k === "arisen" && (
-        <div>
-          <div className="card center">
-            <div className="big-check">✓</div>
-            <div className="hero">You have risen.</div>
-            <p className="muted">Same address, same name, new key.</p>
-            <p className="mono muted">
-              arise tx:{" "}
-              <a href={`${EXPLORER}/tx/${stage.txHash}`} target="_blank">
-                {shortAddr(stage.txHash)}
-              </a>{" "}
-              {stage.ms > 0 && <span className="timing">· confirmed in {stage.ms}ms</span>}
-            </p>
-          </div>
-          <div className="card">
-            <h2>Prove it</h2>
-            {oldCredentialId && oldCredentialId !== stage.key.credentialId && (
-              <>
-                <button
-                  className="secondary danger-outline"
-                  onClick={() => proveSend(oldCredentialId, "old")}
-                  disabled={!!busy}
-                >
-                  Try sending with the OLD passkey (should fail)
-                </button>
-                {proof.old && (
-                  <div className={proof.old.ok ? "errbox" : "okbox"}>
-                    {proof.old.ok
-                      ? `unexpected: ${proof.old.detail}`
-                      : `✗ rejected onchain: ${proof.old.detail} — the old key is dead`}
-                  </div>
-                )}
-              </>
-            )}
-            <button
-              className="secondary"
-              onClick={() => proveSend(stage.key.credentialId, "fresh")}
-              disabled={!!busy}
-            >
-              Send with the NEW passkey (should succeed)
-            </button>
-            {proof.fresh && (
-              <div className={proof.fresh.ok ? "okbox" : "errbox"}>
-                {proof.fresh.ok ? `✓ ${proof.fresh.detail}` : `failed: ${proof.fresh.detail}`}
+      <div className="arise-layout">
+        <div className="step-rail" aria-label="Recovery steps">
+          {STEPS.map((label, i) => {
+            const s = stepState(stage, i);
+            return (
+              <div key={label} className={`step ${s}`}>
+                <span className="step-num">{s === "done" ? "✓" : i + 1}</span>
+                <span className="step-label">{label}</span>
               </div>
-            )}
-          </div>
+            );
+          })}
         </div>
-      )}
 
-      {stage.k === "error" && <div className="errbox">{stage.message}</div>}
-      {busy && (
-        <div className="status-line">
-          <Spinner /> {busy}
+        <div>
+          {stage.k !== "arisen" && (
+            <div className="card">
+              <h2>Lost your device?</h2>
+              <p className="muted">
+                Arise rotates your account to a new passkey — same address, same name — authorized
+                only by a single-use verification code bound to this exact recovery.
+              </p>
+
+              {stage.k === "intro" && (
+                <button className="primary wide" onClick={createNew} disabled={!!busy}>
+                  Create new passkey
+                </button>
+              )}
+
+              {stage.k === "created" && (
+                <>
+                  <p className="okbox">✓ New passkey minted (P-256).</p>
+                  <p className="mono muted">x: {stage.key.x.slice(0, 22)}…</p>
+                  <button className="primary wide" onClick={() => requestCode(stage.key)} disabled={!!busy}>
+                    Request recovery code
+                  </button>
+                </>
+              )}
+
+              {stage.k === "code-sent" && (
+                <>
+                  <p className="muted">Read the 6-digit code from the verification service terminal.</p>
+                  <input
+                    type="text"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", letterSpacing: "0.5em", textAlign: "center" }}
+                    maxLength={6}
+                    inputMode="numeric"
+                    value={code}
+                    aria-label="Recovery code"
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  />
+                  <div className="countdown">
+                    {countdown > 0
+                      ? `code expires in ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, "0")}`
+                      : "code expired — go back and request a new one"}
+                  </div>
+                  <button
+                    className="primary wide"
+                    disabled={code.length !== 6 || countdown === 0 || !!busy}
+                    onClick={() => complete(stage.key)}
+                  >
+                    Arise
+                  </button>
+                </>
+              )}
+
+              {stage.k === "error" && <div className="errbox">{stage.message}</div>}
+            </div>
+          )}
+
+          {stage.k === "arisen" && (
+            <>
+              <div className="card center">
+                <div className="big-check">✓</div>
+                <div className="hero">You have risen.</div>
+                <p className="muted">Same address, same name, new key.</p>
+                <p className="mono muted">
+                  arise tx:{" "}
+                  <a href={`${EXPLORER}/tx/${stage.txHash}`} target="_blank" rel="noreferrer">
+                    {shortAddr(stage.txHash)}
+                  </a>{" "}
+                  {stage.ms > 0 && <span className="timing">· confirmed in {(stage.ms / 1000).toFixed(1)}s</span>}
+                </p>
+              </div>
+
+              {/* R5: prove-it as two side-by-side L1 cards */}
+              <div className="prove-grid">
+                <div className="card hover prove-card">
+                  <div className="prove-mark no">✗</div>
+                  <h2>Old passkey</h2>
+                  <p className="muted">Should be rejected on-chain — the rotation is real.</p>
+                  {oldCredentialId && oldCredentialId !== stage.key.credentialId ? (
+                    <>
+                      <button
+                        className="secondary danger-outline"
+                        onClick={() => proveSend(oldCredentialId, "old")}
+                        disabled={!!busy}
+                      >
+                        Try sending with it
+                      </button>
+                      {proof.old && (
+                        <div className={proof.old.ok ? "errbox" : "okbox"}>
+                          {proof.old.ok
+                            ? `unexpected: ${proof.old.detail}`
+                            : `✗ rejected: ${proof.old.detail} — the old key is dead`}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="muted">(no old credential on this device)</p>
+                  )}
+                </div>
+                <div className="card hover prove-card">
+                  <div className="prove-mark yes">✓</div>
+                  <h2>New passkey</h2>
+                  <p className="muted">Sends normally — same address, new authority.</p>
+                  <button
+                    className="secondary"
+                    onClick={() => proveSend(stage.key.credentialId, "fresh")}
+                    disabled={!!busy}
+                  >
+                    Send with it
+                  </button>
+                  {proof.fresh && (
+                    <div className={proof.fresh.ok ? "okbox" : "errbox"}>
+                      {proof.fresh.ok ? `✓ ${proof.fresh.detail}` : `failed: ${proof.fresh.detail}`}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {busy && (
+            <div className="status-line">
+              <Spinner /> {busy}
+            </div>
+          )}
+
+          {stage.k !== "arisen" && (
+            <div className="stat-grid" style={{ marginTop: 16 }}>
+              <div className="stat-card">
+                <div className="stat-label">Purpose-bound</div>
+                <div style={{ fontSize: "0.88rem" }}>
+                  The code commits to this account AND the new key's hash — it can't rotate in any
+                  other key.
+                </div>
+                <div className="stat-sub">domain: suho.arise:&lt;account&gt;:&lt;keyhash&gt;</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Single-use</div>
+                <div style={{ fontSize: "0.88rem" }}>
+                  Consumed on-chain the moment it verifies; a replayed or observed code is dead.
+                </div>
+                <div className="stat-sub">EAS attestation · verifyAndConsume</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Relayable</div>
+                <div style={{ fontSize: "0.88rem" }}>
+                  Anyone may submit the recovery — authority is the code itself, never the caller.
+                </div>
+                <div className="stat-sub">no gas needed on the lost account</div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

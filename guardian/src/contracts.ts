@@ -14,6 +14,7 @@ export const ADDR = {
   ondolTransferGuard: deployments.ondolTransferGuard as `0x${string}`,
   ariseModule: deployments.ariseModule as `0x${string}`,
   ondolAccountImpl: deployments.ondolAccountImpl as `0x${string}`,
+  ondolAccountV2Impl: deployments.ondolAccountV2Impl as `0x${string}`,
   // GIWA-official contracts (mirrors contracts/src/DojangConfig.sol)
   dojangScroll: "0xd5077b67dcb56caC8b270C7788FC3E6ee03F17B9" as `0x${string}`,
   eas: "0x4200000000000000000000000000000000000021" as `0x${string}`,

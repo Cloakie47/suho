@@ -5,5 +5,6 @@
   "suhoCardSchemaUid": "0x1eb6f3a6fefafeb323d44868d7c4c97ee64c981d9c47c5f028154a29dba0bdaa",
   "ondolTransferGuard": "0x106953DB14B1183378976E128AE5cd40C4b493d2",
   "ariseModule": "0x827375200CF4595f71b09497A65BAF10Ca907466",
-  "ondolAccountImpl": "0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4"
+  "ondolAccountImpl": "0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4",
+  "ondolAccountV2Impl": "0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69"
 }

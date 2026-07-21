@@ -40,6 +40,7 @@ export interface TxToast {
 // the next action. Never apologize; raw hex only behind the disclosure.
 // OtpRequired deliberately has no entry — the interstitial IS the response.
 const ERROR_SENTENCES: Record<string, string> = {
+  TransactionReverted: "The transaction reverted on-chain. Nothing moved.",
   CodeInvalid: "That code didn't match. Check the verification window.",
   CodeExpired: "Code expired. Request a fresh one.",
   CodeAlreadyUsed: "That code was already used. Request a fresh one.",
