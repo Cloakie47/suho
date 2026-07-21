@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/chain.ts","./src/config.ts","./src/main.tsx","./src/ui.tsx","./src/webauthn.ts","./src/screens/arise.tsx","./src/screens/send.tsx","./src/screens/upgrade.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/api.ts","./src/chain.ts","./src/config.ts","./src/main.tsx","./src/ui.tsx","./src/webauthn.ts","./src/screens/arise.tsx","./src/screens/directory.tsx","./src/screens/send.tsx","./src/screens/upgrade.tsx"],"version":"5.9.3"}

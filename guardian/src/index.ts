@@ -33,6 +33,7 @@ import {
 import { resolveName, reverseName } from "./upid.js";
 import { encodeWebAuthnSig, spkiToXY, type BrowserAssertion } from "./webauthn.js";
 import { printCodeBanner } from "./banner.js";
+import { getDirectory, prewarmDirectory } from "./directory.js";
 
 // P4: demo readiness — alice must cover one verified send (0.0002) plus one OTP
 // send at threshold+0.001, with 30% margin. Execute gas is relayer-paid, so only
@@ -260,6 +261,17 @@ app.post("/otp/request", async (req, res) => {
   }
 });
 
+// ---- GET /directory[?q=...][&refresh=1] ----
+// D1: active, verified up.id names only — this list IS the trust surface.
+// Search is server-side (the in-window name set is ~60k+); responses cap at 500.
+app.get("/directory", async (req, res) => {
+  try {
+    res.json(await getDirectory(String(req.query.q ?? ""), req.query.refresh === "1"));
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 // ---- GET /demo-credential ----
 // Demo glue: alice's account was initialized with the probe E Windows Hello
 // credential; the app fetches its id here when localStorage is empty.
@@ -338,4 +350,5 @@ app.listen(PORT, () => {
   console.log(`suho guardian on http://localhost:${PORT} (chain ${giwaSepolia.id})`);
   console.log(`relayer/issuer: ${relayerAccount.address}`);
   console.log(`demo EOA:       ${aliceAccount.address}`);
+  prewarmDirectory();
 });

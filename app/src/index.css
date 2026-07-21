@@ -73,6 +73,23 @@ body {
   color: var(--warn); font-size: 0.78rem;
 }
 
+.dir-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 4px; border-bottom: 1px solid var(--line);
+}
+.dir-row:last-child { border-bottom: none; }
+.dir-name { font-weight: 600; flex: 1; }
+.you-marker { color: var(--accent); font-weight: 400; font-size: 0.85rem; }
+.dir-send {
+  border: 1px solid var(--accent-dim); background: none; color: var(--accent);
+  border-radius: 8px; padding: 5px 14px; cursor: pointer; font-size: 0.85rem;
+}
+.dir-send:disabled { border-color: var(--line); color: var(--muted); cursor: default; }
+.dir-refresh {
+  border: none; background: none; color: var(--accent); cursor: pointer;
+  font-size: 0.8rem; margin-left: 10px; padding: 0;
+}
+
 input[type="text"], input[type="number"] {
   width: 100%; padding: 12px 14px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--panel-2); color: var(--text);

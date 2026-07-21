@@ -5,13 +5,15 @@ import { Spinner } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
 import { Arise } from "./screens/Arise";
+import { Directory } from "./screens/Directory";
 
-type Screen = "upgrade" | "send" | "arise";
+type Screen = "upgrade" | "send" | "directory" | "arise";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("upgrade");
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [prefillRecipient, setPrefillRecipient] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -41,6 +43,12 @@ export default function App() {
           <button className={screen === "send" ? "active" : ""} onClick={() => setScreen("send")}>
             Send
           </button>
+          <button
+            className={screen === "directory" ? "active" : ""}
+            onClick={() => setScreen("directory")}
+          >
+            Directory
+          </button>
           <button className={screen === "arise" ? "active" : ""} onClick={() => setScreen("arise")}>
             Arise
           </button>
@@ -54,7 +62,17 @@ export default function App() {
       )}
       {error && <div className="errbox">guardian unreachable: {error}</div>}
       {status && screen === "upgrade" && <Upgrade status={status} onDone={() => setScreen("send")} />}
-      {status && screen === "send" && <Send status={status} refresh={refresh} />}
+      {status && screen === "send" && (
+        <Send status={status} refresh={refresh} prefillRecipient={prefillRecipient} />
+      )}
+      {status && screen === "directory" && (
+        <Directory
+          onSendTo={(name) => {
+            setPrefillRecipient(name);
+            setScreen("send");
+          }}
+        />
+      )}
       {status && screen === "arise" && <Arise status={status} refresh={refresh} />}
     </div>
   );

@@ -60,4 +60,14 @@ export const api = {
       post({ account, newX, newY, code }),
     ),
   demoCredential: () => req<{ credentialId: string }>("/demo-credential"),
+  directory: (q = "", refresh = false) =>
+    req<{ entries: DirEntry[]; total: number; shown: number; scannedToBlock: string }>(
+      `/directory?q=${encodeURIComponent(q)}${refresh ? "&refresh=1" : ""}`,
+    ),
 };
+
+export interface DirEntry {
+  name: string;
+  address: Hex;
+  active: boolean;
+}

@@ -24,8 +24,21 @@ type SendPhase =
   | { k: "otp"; expiresAt: number; error?: string }
   | { k: "error"; message: string };
 
-export function Send({ status, refresh }: { status: Status; refresh: () => void }) {
+export function Send({
+  status,
+  refresh,
+  prefillRecipient,
+}: {
+  status: Status;
+  refresh: () => void;
+  prefillRecipient?: string | null;
+}) {
   const [input, setInput] = useState("");
+
+  // Directory deep-link (D2): arriving with a prefilled recipient starts resolution.
+  useEffect(() => {
+    if (prefillRecipient) setInput(prefillRecipient);
+  }, [prefillRecipient]);
   const [recipient, setRecipient] = useState<Recipient | null>(null);
   const [resolving, setResolving] = useState(false);
   const [amount, setAmount] = useState("");
