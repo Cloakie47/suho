@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Suho 수호 — a wallet that guards you</title>
+  <title>Suho 수호 · a wallet that guards you</title>
   <meta name="description" content="Suho turns a verified account on GIWA into a passkey-secured smart wallet. Send to names, not addresses. Recover without a seed phrase. Live on GIWA Sepolia." />
   <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-  <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600&display=swap" />
+  <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=general-sans@500,600&display=swap" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" />
   <link rel="stylesheet" href="style.css" />
@@ -23,7 +23,7 @@
     <section class="hero">
       <div class="hero-copy">
         <h1>A wallet that guards&nbsp;you.</h1>
-        <p class="sub">Start with nothing. Send to names, not addresses. No seed phrase, ever.</p>
+        <p class="sub">Start with nothing. No seed phrase, ever.</p>
         <div class="ctas">
           <a class="btn btn-primary" href="#demo">Watch the demo</a>
           <a class="btn btn-ghost" href="https://github.com/Cloakie47/suho">View the code</a>
@@ -41,10 +41,10 @@
               <img class="card-qr" src="assets/qr.png" width="72" height="72" alt="" />
             </div>
             <svg class="card-curve" viewBox="0 0 220 16" fill="none" aria-hidden="true">
-              <path d="M0 14 C 30 14, 40 3, 55 3 C 70 3, 80 14, 110 14 C 140 14, 150 3, 165 3 C 180 3, 190 14, 220 14" stroke="#E8442E" stroke-width="1.5" stroke-linecap="round" />
+              <path d="M0 14 C 30 14, 40 3, 55 3 C 70 3, 80 14, 110 14 C 140 14, 150 3, 165 3 C 180 3, 190 14, 220 14" stroke="#D6402C" stroke-width="1.5" stroke-linecap="round" />
             </svg>
             <div class="card-bottom">
-              <span class="chip">v1</span>
+              <span class="chip">v2</span>
               <span class="card-net">GIWA Sepolia</span>
             </div>
           </div>
@@ -65,39 +65,39 @@
 
     <!-- 3 · HOW SUHO GUARDS -->
     <section class="guards">
-      <p class="eyebrow reveal" style="--i:0"><span lang="ko">지붕 아래</span> — under the roof</p>
+      <p class="eyebrow reveal" style="--i:0"><span lang="ko">지붕 아래</span> · under the roof</p>
       <h2 class="reveal" style="--i:1">How Suho guards</h2>
       <div class="grid">
         <article class="gcard wide reveal" style="--i:0">
           <img src="assets/shots/crop-onboard.png" alt="App screenshot: the onboarding screen offering 'Create your Suho account' with the red Suho seal" />
           <div>
             <h3>Start with nothing</h3>
-            <p>A fresh browser becomes a passkey-controlled, verified, named account. The bootstrap key is generated in-tab, signs twice, and is destroyed — the guardian just pays the gas.</p>
+            <p>A fresh browser becomes a verified, named account. The key that starts it signs twice, then is destroyed.</p>
             <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42">gasless onboarding · 0xf00b…ce42</a>
           </div>
         </article>
         <article class="gcard reveal" style="--i:0">
           <img src="assets/shots/crop-verified.png" alt="App screenshot: suho.up.id resolved with the red verification seal and the label 'Verified human'" />
           <h3>Verified humans</h3>
-          <p>Recipients resolve by up.id name — the seal appears only for Dojang-verified humans.</p>
+          <p>Recipients resolve by name. The seal marks verified humans only.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/address/0xd5077b67dcb56caC8b270C7788FC3E6ee03F17B9">isVerified · DojangScroll 0xd507…17B9</a>
         </article>
         <article class="gcard reveal" style="--i:1">
           <img src="assets/shots/crop-guard.png" alt="App screenshot: a large transfer to an unverified address showing the amber warning and a notice that a verification code will be required" />
           <h3>The Guard</h3>
-          <p>Large transfers to strangers stop until a one-time code, bound to that exact transfer, is entered.</p>
+          <p>Large transfers to strangers stop for a one-time code. The code is bound to that exact transfer.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0x3c3fb31d608d984388cdadc37e81dcf9f631412542a1d83f6b3e67782ca24b03">OTP-gated send · 0x3c3f…4b03</a>
         </article>
         <article class="gcard reveal" style="--i:2">
           <img src="assets/shots/crop-arise.png" alt="App screenshot: the Arise recovery screen asking 'Lost your device?'" />
           <h3>Arise</h3>
-          <p>A lost device is one verification code away from a new passkey. Same address, same name.</p>
+          <p>A lost device is one code away from a new passkey. Same address, same name.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0x36770b1bc51c3b6972bb50b5b5d36b65e52121867fc8e1f90d4f254e85676bc3">arise() · 0x3677…6bc3</a>
         </article>
         <article class="gcard reveal" style="--i:3">
           <img src="assets/shots/crop-card.png" alt="App screenshot: the Suho identity card with seal, up.id name, QR code and version line" />
           <h3>The Card</h3>
-          <p>An identity card attested by the account itself — every version passkey-signed, history on EAS.</p>
+          <p>An identity card attested by the account itself. Every version is passkey-signed.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0x5cbfba2ea0e076948d6eeb411c349f47cb0b4fa91339cf3321098e1df08ab167">self-attested · 0x5cbf…b167</a>
         </article>
       </div>
@@ -126,7 +126,7 @@
           <tbody>
             <tr>
               <td class="tick">✓</td>
-              <td>EOA upgraded in place — EIP-7702 delegation + passkey init</td>
+              <td>Account upgraded in place: EIP-7702 + passkey init</td>
               <td class="mono dim">Jul 20</td>
               <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0x5e6e4b14af7ad84dda9cc525ff43be0ac1922e3e70b8be66e0ecdbd2656835ef">0x5e6e…35ef</a></td>
             </tr>
@@ -138,19 +138,19 @@
             </tr>
             <tr>
               <td class="tick">✓</td>
-              <td>Small send to a stranger — warned, allowed</td>
+              <td>Small send to a stranger: warned, allowed</td>
               <td class="mono dim">Jul 20</td>
               <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0xf1ab1cdc2243ea49fc054a4b6fd4e54edb6bde80be7d04be6494d8fc37bf300d">0xf1ab…300d</a></td>
             </tr>
             <tr>
               <td class="tick">✓</td>
-              <td>Large send to a stranger — held for a one-time code</td>
+              <td>Large send to a stranger: held for a one-time code</td>
               <td class="mono dim">Jul 21</td>
               <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0x3c3fb31d608d984388cdadc37e81dcf9f631412542a1d83f6b3e67782ca24b03">0x3c3f…4b03</a></td>
             </tr>
             <tr>
               <td class="tick">✓</td>
-              <td>Arise — passkey rotated with a single-use code</td>
+              <td>Arise: passkey rotated with a single-use code</td>
               <td class="mono dim">Jul 20</td>
               <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0x36770b1bc51c3b6972bb50b5b5d36b65e52121867fc8e1f90d4f254e85676bc3">0x3677…6bc3</a></td>
             </tr>
@@ -162,13 +162,13 @@
             </tr>
             <tr>
               <td class="tick">✓</td>
-              <td>Account upgraded v1 → v2 in place — state intact, no re-init</td>
+              <td>Upgraded v1 to v2 in place: state intact, no re-init</td>
               <td class="mono dim">Jul 21</td>
               <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0x2a24fa95278db11517d9af46e9b43d9046784d82ab1f1cdec0972bd6316598af">0x2a24…98af</a></td>
             </tr>
             <tr>
               <td class="tick">✓</td>
-              <td>Stranger onboarded gasless — key never left the browser</td>
+              <td>Stranger onboarded gasless: key never left the browser</td>
               <td class="mono dim">Jul 22</td>
               <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42">0xf00b…ce42</a></td>
             </tr>
@@ -180,7 +180,7 @@
 
   <!-- 6 · FOOTER -->
   <footer id="demo">
-    <p class="demo-note">Demo video — coming soon.</p>
+    <p class="demo-note">Demo video: coming soon.</p>
     <nav class="foot-links">
       <a href="https://github.com/Cloakie47/suho">GitHub</a>
       <span aria-hidden="true">·</span>
@@ -189,7 +189,7 @@
     <p class="built">Built for GASOK · GIWA Sepolia</p>
     <p class="honesty">Verification on this testnet is issued by the testnet attester; card details are self-declared by verified owners.</p>
     <svg class="tile-off" width="220" height="16" viewBox="0 0 220 16" fill="none" aria-hidden="true">
-      <path d="M0 14 C 30 14, 40 3, 55 3 C 70 3, 80 14, 110 14 C 140 14, 150 3, 165 3 C 180 3, 190 14, 220 14" stroke="#E8442E" stroke-width="2" stroke-linecap="round" opacity="0.6" />
+      <path d="M0 14 C 30 14, 40 3, 55 3 C 70 3, 80 14, 110 14 C 140 14, 150 3, 165 3 C 180 3, 190 14, 220 14" stroke="#D6402C" stroke-width="2" stroke-linecap="round" opacity="0.6" />
     </svg>
   </footer>
 
