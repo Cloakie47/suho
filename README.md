@@ -110,3 +110,23 @@ Keys live in the repo-root `.env` (see `.env.example`; testnet-only, never
 committed). Contracts: `cd contracts && forge test --fork-url
 https://sepolia-rpc.giwa.io` (38 fork tests). Stage directions:
 `docs/demo-script.md`.
+
+## Docs site
+
+The docs are VitePress, source in `docs/`, built to `site/docs` so the landing
+(`site/index.html`) and the docs deploy together from `site/`.
+
+```bash
+cd docs && npm i && npm run docs:build   # outputs to ../site/docs
+```
+
+The built output in `site/docs` is committed. There is no CI pipeline, GitHub
+Pages serves what is committed, and reproducibility lives in the `docs/` source.
+Rebuild and re-commit when the docs change.
+
+Cross-origin links are env-configurable, because the app and docs are separate
+origins. The app's "Docs" link uses `VITE_DOCS_URL` (default
+`http://localhost:8899/docs/`). The docs "Launch app" link uses `SUHO_APP_URL`
+at build time (default `http://localhost:5173/`). Set both to the deployed URLs
+before a production build. Serve the whole thing locally with any static server
+over `site/` on port 8899 (`npx http-server site -p 8899`).

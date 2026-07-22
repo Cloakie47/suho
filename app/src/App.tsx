@@ -20,9 +20,11 @@ import {
   setActiveAccount,
   storeCredential,
   DEMO_ACCOUNT,
+  DOCS_URL,
 } from "./config";
 import { accountPasskey, isOndolAccount } from "./chain";
 import { relinkPasskey } from "./webauthn";
+import { humanError } from "./errors";
 import { Onboard } from "./screens/Onboard";
 
 interface KnownRow {
@@ -485,13 +487,9 @@ export default function App() {
           ))}
         </nav>
         <div className="side-foot">
-          <span className="net-pill">
-            <span className="dot" /> GIWA Sepolia · ~0.9s preconf
-          </span>
-          <span className="guardian-status">
-            <span className={`dot${error ? " err" : ""}`} />
-            {error ? "guardian offline" : "guardian connected"}
-          </span>
+          <a className="side-link" href={DOCS_URL} target="_blank" rel="noreferrer">
+            Docs
+          </a>
         </div>
       </aside>
 
@@ -512,7 +510,16 @@ export default function App() {
           )}
         </div>
         <main className="main">
-          <div className="content">{body}</div>
+          <div className="content">
+            {/* Status only when broken: a slim banner when the last guardian
+                poll failed (unreachable, or RPC failing). Gone when healthy. */}
+            {status && error != null && (
+              <div className="status-banner" role="status">
+                {humanError(error).text}
+              </div>
+            )}
+            {body}
+          </div>
         </main>
       </div>
 

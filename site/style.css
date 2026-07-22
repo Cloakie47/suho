@@ -267,3 +267,6 @@ footer {
   .btn-primary:hover { transform: none; }
   .card3d { transition: none; }
 }
+
+/* header links (Docs + GitHub) */
+.nav-links { display: flex; gap: 20px; align-items: baseline; }

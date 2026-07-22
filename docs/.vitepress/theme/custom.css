@@ -1,0 +1,73 @@
+/* Suho docs theme: suho-design v2 hanji light mapped onto VitePress vars. */
+:root {
+  --hanji: #faf7f0;
+  --hanji-raised: #ffffff;
+  --ink: #1c1917;
+  --ink-dim: #6e6862;
+  --line: #e8e2d8;
+  --seal: #d93a25;
+  --seal-deep: #a82415;
+  --gild: #b08a47;
+  --jade: #3e7a5e;
+
+  /* fonts */
+  --vp-font-family-base: "Pretendard Variable", Pretendard, "Malgun Gothic", -apple-system, sans-serif;
+  --vp-font-family-mono: "IBM Plex Mono", Consolas, monospace;
+
+  /* brand → seal */
+  --vp-c-brand-1: var(--seal-deep);
+  --vp-c-brand-2: var(--seal);
+  --vp-c-brand-3: var(--seal);
+  --vp-c-brand-soft: rgba(217, 58, 37, 0.08);
+
+  /* surfaces → hanji */
+  --vp-c-bg: var(--hanji);
+  --vp-c-bg-alt: #f4f0e8;
+  --vp-c-bg-soft: #f4f0e8;
+  --vp-c-bg-elv: var(--hanji-raised);
+  --vp-c-text-1: var(--ink);
+  --vp-c-text-2: var(--ink-dim);
+  --vp-c-divider: var(--line);
+  --vp-c-border: var(--line);
+  --vp-c-gutter: var(--line);
+
+  --vp-c-default-soft: #f0ebe1;
+}
+
+/* General Sans for headings and the brand */
+h1, h2, h3, h4, .VPNavBarTitle .title, .vp-doc h1, .vp-doc h2, .vp-doc h3 {
+  font-family: "General Sans", "Pretendard Variable", sans-serif !important;
+  letter-spacing: -0.015em;
+}
+
+/* hanji hero seal-gradient button */
+.VPButton.brand {
+  background: linear-gradient(135deg, var(--seal), var(--seal-deep));
+  border-color: var(--seal-deep);
+}
+
+/* section rule under h2, echoing the app's hairline */
+.vp-doc h2 {
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
+}
+
+/* the hangul mark stays seal-deep for small-text contrast */
+.hanja { color: var(--seal-deep); }
+
+/* mono chain-fact style for inline code holding addresses/hashes */
+.vp-doc :not(pre) > code {
+  background: #f2ede3;
+  color: var(--seal-deep);
+  border: 1px solid var(--line);
+}
+
+/* verified-seal callout accent */
+.vp-doc .custom-block.tip {
+  border-color: var(--jade);
+  background: #eef5f0;
+}
+.vp-doc .custom-block.warning {
+  border-color: var(--gild);
+  background: #fbf3e4;
+}

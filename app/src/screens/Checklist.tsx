@@ -7,6 +7,7 @@ import { executeWithPasskey } from "../execute";
 import { activeAccount, GUARDIAN } from "../config";
 import { Seal, Spinner, fmtEth } from "../ui";
 import { useToast, type TxToast } from "../toast";
+import { isUserCancel } from "../errors";
 
 export const LS_FIRST_SEND = "suho.firstSendDone";
 const LS_RECOVERY_NOTE = "suho.recoveryNoteDismissed";
@@ -85,10 +86,16 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
       );
       refresh();
     } catch (e) {
-      // Every flow error goes through the toast's human-sentence mapping. A
-      // fetch-phase failure (AlreadyVerified, NameTaken...) fires before the
-      // `sent` hook, so open a carrier toast for it.
-      (h.t ?? toast.begin(pendingLabel)).error(e);
+      if (isUserCancel(e)) {
+        // Passkey prompt canceled. Not an error.
+        h.t?.dismiss();
+        toast.note("Canceled.");
+      } else {
+        // Every flow error goes through the toast's human-sentence mapping. A
+        // fetch-phase failure (AlreadyVerified, NameTaken...) fires before the
+        // `sent` hook, so open a carrier toast for it.
+        (h.t ?? toast.begin(pendingLabel)).error(e);
+      }
     } finally {
       setBusy(null);
     }

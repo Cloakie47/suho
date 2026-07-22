@@ -12,8 +12,9 @@ import {
   setActiveAccount,
 } from "../config";
 import { createPasskey } from "../webauthn";
-import { humanError } from "../errors";
+import { humanError, isUserCancel } from "../errors";
 import { Seal, Spinner, shortAddr } from "../ui";
+import { useToast } from "../toast";
 
 type Stage =
   | { k: "intro" }
@@ -93,6 +94,7 @@ export function Onboard({
   onLegacy: () => void;
 }) {
   const [stage, setStage] = useState<Stage>({ k: "intro" });
+  const toast = useToast();
 
   const create = async () => {
     try {
@@ -120,7 +122,12 @@ export function Onboard({
       setActiveAccount(address);
       setStage({ k: "done", address, txHash: r.txHash });
     } catch (e) {
-      setStage({ k: "error", message: humanError(e).text });
+      if (isUserCancel(e)) {
+        setStage({ k: "intro" });
+        toast.note("Canceled.");
+      } else {
+        setStage({ k: "error", message: humanError(e).text });
+      }
     }
   };
 

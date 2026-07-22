@@ -2,9 +2,10 @@ import { useState } from "react";
 import { api, type Status } from "../api";
 import { createPasskey, relinkPasskey } from "../webauthn";
 import { accountPasskey } from "../chain";
-import { humanError } from "../errors";
+import { humanError, isUserCancel } from "../errors";
 import { DEMO_ACCOUNT, EXPLORER, isLegacyDemo, storedCredential, storeCredential } from "../config";
 import { Seal, Spinner, shortAddr } from "../ui";
+import { useToast } from "../toast";
 
 /** R5: no screen is a single element in a void — success is a two-col
  *  composition with a mini card preview on the right. */
@@ -39,6 +40,7 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ txHash: string; code: string } | null>(null);
   const hasCredential = !!storedCredential();
+  const toast = useToast();
 
   // Chain-verified relink. The old path took a credential id from the
   // guardian, which went stale the moment Arise rotated the key; now the user
@@ -69,7 +71,8 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
       const res = await api.upgrade(DEMO_ACCOUNT, { x: passkey.x, y: passkey.y });
       setResult({ txHash: res.txHash, code: res.code });
     } catch (e) {
-      setError(humanError(e).text);
+      if (isUserCancel(e)) toast.note("Canceled.");
+      else setError(humanError(e).text);
     } finally {
       setBusy(null);
     }

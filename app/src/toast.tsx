@@ -18,7 +18,7 @@ import { humanError } from "./errors";
 /// (preconfirmed); errors speak in human sentences with the raw revert behind
 /// a details disclosure.
 
-type Phase = "pending" | "preconfirmed" | "final" | "error";
+type Phase = "pending" | "preconfirmed" | "final" | "error" | "note";
 
 interface ToastItem {
   id: number;
@@ -39,6 +39,9 @@ export interface TxToast {
 
 interface ToastApi {
   begin(label: string): TxToast;
+  /** A neutral, gray, quickly self-dismissing note. For cancels ("Canceled.")
+   *  and other non-error asides. No red, no seal, no lifecycle. */
+  note(label: string): void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -101,6 +104,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [remove],
   );
 
+  const note = useCallback(
+    (label: string) => {
+      const id = nextId++;
+      setToasts((ts) => [...ts, { id, phase: "note", label }]);
+      timers.current.set(id, window.setTimeout(() => remove(id), 2200));
+    },
+    [remove],
+  );
+
   // Dev-only hook so the lifecycle can be exercised (and screenshotted)
   // without a live transaction. Stripped from production builds.
   useEffect(() => {
@@ -120,7 +132,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, [begin]);
 
   return (
-    <ToastContext.Provider value={{ begin }}>
+    <ToastContext.Provider value={{ begin, note }}>
       {children}
       <div className="toast-stack" role="status" aria-live="polite">
         {toasts.slice(-3).map((t) => (

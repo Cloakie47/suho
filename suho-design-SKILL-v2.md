@@ -43,6 +43,8 @@ Shadows carry depth now (light theme): cards `0 1px 2px rgba(28,25,23,.05)`, rai
 - Plain words over jargon at the surface: say "Your passkey signs every transaction." not "Day-to-day authority is a WebAuthn P-256 key". Technical receipts (P256VERIFY, type-4, 0xef0100) live only in mono chain-fact lines and tooltips, never in explanatory sentences.
 - Banned: seamless, revolutionary, next-gen, cutting-edge, empower, unlock. Also banned: three-part constructions ending in a punchline.
 - Every explainer card: max 2 sentences. If it needs three, it needs a doc link instead.
+- Cancel is not an error. A canceled or timed-out passkey prompt (NotAllowedError) is the user backing out, not a failure. Return the flow to its pre-prompt state quietly. At most a neutral gray "Canceled." toast that self-dismisses fast. Never red, never a raw DOMException, never an error state. Reserve error styling (red, the toast error phase, inline errbox) for things that actually went wrong.
+- Errors state what happened plus the next action, in a human sentence. Never show raw exception text in the main message; keep the raw only behind a "details" disclosure. A device with no passkey support gets a plain sentence ("This device can't use a passkey. You need Windows Hello or another platform passkey."), not a code.
 - Rewrite pass examples:
   - "Arise — one code, no seed phrase" → "Arise: one code. No seed phrase."
   - "This address is now a smart account, secured by your passkey. The old key can go in a drawer." → "This address is now a smart account. Your passkey controls it." (drawer line moves to a tooltip)

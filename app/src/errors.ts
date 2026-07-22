@@ -31,6 +31,34 @@ export function humanError(err: unknown): { text: string; raw: string } {
   // the disclosure so "TypeError: Failed to fetch" survives.
   const rawCarrier = (err as { raw?: string })?.raw;
   const raw = rawCarrier ?? message;
+  if (isPasskeyUnavailable(err)) {
+    return {
+      text: "This device can't use a passkey. You need Windows Hello or another platform passkey.",
+      raw,
+    };
+  }
   const key = Object.keys(SENTENCES).find((k) => message.includes(k) || raw.includes(k));
   return { text: key ? SENTENCES[key] : "Something went wrong. Try again.", raw };
+}
+
+const name = (err: unknown): string => (err as { name?: string })?.name ?? "";
+const msg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** A canceled or timed-out passkey prompt. NOT an error: the user backed out.
+ *  Only meaningful for prompts that target a KNOWN credential (sign/create),
+ *  where NotAllowedError means cancel. In discovery (relink, no
+ *  allowCredentials) NotAllowedError is ambiguous and handled separately. */
+export function isUserCancel(err: unknown): boolean {
+  return (
+    name(err) === "NotAllowedError" ||
+    /not allowed|timed out|operation either timed out/i.test(msg(err))
+  );
+}
+
+/** The device has no usable authenticator (no Windows Hello, unsupported). */
+export function isPasskeyUnavailable(err: unknown): boolean {
+  return (
+    name(err) === "NotSupportedError" ||
+    /no available authenticator|not supported|InvalidStateError/i.test(msg(err))
+  );
 }

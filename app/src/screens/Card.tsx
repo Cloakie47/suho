@@ -6,7 +6,7 @@ import { activeAccount } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { VCard, CardHistory } from "../vcard";
 import { useToast, type TxToast } from "../toast";
-import { humanError } from "../errors";
+import { humanError, isUserCancel } from "../errors";
 
 // The lifecycle toast is the tx surface; inline phases cover the passkey
 // prompt and pre-relay errors only.
@@ -55,7 +55,11 @@ export function Card({ status }: { status: Status }) {
       setEditing(false);
       await load();
     } catch (e) {
-      if (h.t) {
+      if (isUserCancel(e)) {
+        h.t?.dismiss();
+        setPhase({ k: "idle" });
+        toast.note("Canceled.");
+      } else if (h.t) {
         h.t.error(e);
         setPhase({ k: "idle" });
       } else {

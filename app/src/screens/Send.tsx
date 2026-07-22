@@ -20,7 +20,7 @@ import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { fetchActivity, type ActivityItem } from "../activity";
-import { humanError } from "../errors";
+import { humanError, isUserCancel } from "../errors";
 import { recordSend, sessionStats, measuredMs } from "../stats";
 
 interface Recipient {
@@ -169,6 +169,7 @@ function OtpModal({
   value,
   onChange,
   onSubmit,
+  onRequestNew,
   onClose,
   busy,
 }: {
@@ -176,6 +177,7 @@ function OtpModal({
   value: string;
   onChange: (v: string) => void;
   onSubmit: () => void;
+  onRequestNew: () => void;
   onClose: () => void;
   busy: boolean;
 }) {
@@ -256,15 +258,21 @@ function OtpModal({
           ))}
         </div>
         <div className="countdown">
-          {countdown > 0 ? "single-use · bound to this exact transfer" : "code expired. Close and send again."}
+          {countdown > 0 ? "single-use · bound to this exact transfer" : "This code has expired."}
         </div>
-        <button
-          className="primary wide"
-          disabled={value.length !== 6 || countdown === 0 || busy}
-          onClick={onSubmit}
-        >
-          Verify & send
-        </button>
+        {countdown > 0 ? (
+          <button
+            className="primary wide"
+            disabled={value.length !== 6 || busy}
+            onClick={onSubmit}
+          >
+            Verify & send
+          </button>
+        ) : (
+          <button className="primary wide" disabled={busy} onClick={onRequestNew}>
+            Request a new code
+          </button>
+        )}
         <button className="secondary" onClick={onClose}>
           Cancel
         </button>
@@ -393,22 +401,49 @@ export function Send({
       setActBump((b) => b + 1);
       refresh();
     } catch (e) {
-      if (e instanceof GuardianError && e.message === "OtpRequired") {
+      if (isUserCancel(e)) {
+        // Passkey prompt canceled or timed out. Not an error: quietly return to
+        // the pre-prompt state (the OTP modal if we were in it, else idle).
+        handle?.dismiss();
+        setPhase(fromOtp ?? { k: "idle" });
+        toast.note("Canceled.");
+      } else if (e instanceof GuardianError && e.message === "OtpRequired") {
         handle?.dismiss(); // no toast — the interstitial IS the response (skill)
         try {
           const r = await api.otpRequest(activeAccount(), recipient.address, value.toString());
           setOtpValue("");
           setPhase({ k: "otp", expiresAt: r.expiresAt });
         } catch (e2) {
-          setPhase({ k: "error", message: String(e2) });
+          (handle ?? toast.begin("Requesting code…")).error(e2);
+          setPhase(fromOtp ?? { k: "idle" });
         }
       } else if (handle) {
         handle.error(e); // typed revert -> human sentence in the toast
         setPhase(fromOtp ?? { k: "idle" }); // bad code: reopen the interstitial
       } else {
-        // pre-relay failures (e.g. passkey prompt cancelled) stay inline
-        setPhase({ k: "error", message: humanError(e).text });
+        // pre-relay failure with no toast yet: carry it through one
+        (toast.begin(`Sending ${amount} ETH to ${recipient.display}…`)).error(e);
+        setPhase({ k: "idle" });
       }
+    }
+  };
+
+  // Task 3 item 3: countdown hit zero. Re-issue a fresh code for the same
+  // transfer and reset the modal timer, without leaving the interstitial.
+  const requestNewCode = async () => {
+    if (!recipient || recipient.notFound) return;
+    let v: bigint;
+    try {
+      v = parseEther(amount);
+    } catch {
+      return;
+    }
+    try {
+      const r = await api.otpRequest(activeAccount(), recipient.address, v.toString());
+      setOtpValue("");
+      setPhase({ k: "otp", expiresAt: r.expiresAt });
+    } catch (e) {
+      toast.begin("Requesting a new code…").error(e);
     }
   };
 
@@ -507,6 +542,7 @@ export function Send({
           value={otpValue}
           onChange={setOtpValue}
           onSubmit={() => doSend(otpValue)}
+          onRequestNew={requestNewCode}
           onClose={() => setPhase({ k: "idle" })}
           busy={busy}
         />

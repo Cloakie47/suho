@@ -22,3 +22,7 @@ probe-tmp/*
 
 # Guardian local code log (plaintext testnet OTPs)
 guardian/codes.log
+
+# VitePress
+docs/.vitepress/cache/
+docs/.vitepress/.temp/

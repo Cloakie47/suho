@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { encodeAbiParameters, keccak256, parseEther, type Hex } from "viem";
-import { api, GuardianError, type Status } from "../api";
+import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
 import { activeAccount, EXPLORER, GUARDIAN, storedCredential, storeCredential } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { recordSend } from "../stats";
-import { humanError } from "../errors";
+import { humanError, isUserCancel } from "../errors";
 
 type Stage =
   | { k: "intro" }
@@ -58,7 +58,12 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
       const key = await createPasskey(label);
       setStage({ k: "created", key });
     } catch (e) {
-      setStage({ k: "error", message: humanError(e).text });
+      if (isUserCancel(e)) {
+        setStage({ k: "intro" });
+        toast.note("Canceled.");
+      } else {
+        setStage({ k: "error", message: humanError(e).text });
+      }
     } finally {
       setBusy(null);
     }
@@ -137,11 +142,15 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
       }));
       refresh();
     } catch (e) {
-      // Old-key rejection: the toast reads "This passkey can't sign for the
-      // account." — the panel below interprets what that proves.
-      handle?.error(e);
-      const msg = e instanceof GuardianError ? e.message : String(e);
-      setProof((p) => ({ ...p, [label]: { ok: false, detail: msg } }));
+      if (isUserCancel(e)) {
+        handle?.dismiss();
+        toast.note("Canceled.");
+      } else {
+        // Old-key rejection: the toast reads "This passkey can't sign for the
+        // account." The panel below interprets what that proves.
+        handle?.error(e);
+        setProof((p) => ({ ...p, [label]: { ok: false, detail: humanError(e).text } }));
+      }
     } finally {
       setBusy(null);
     }
@@ -212,15 +221,25 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
                   <div className="countdown">
                     {countdown > 0
                       ? `code expires in ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, "0")}`
-                      : "code expired. Request a new one."}
+                      : "This code has expired."}
                   </div>
-                  <button
-                    className="primary wide"
-                    disabled={code.length !== 6 || countdown === 0 || !!busy}
-                    onClick={() => complete(stage.key)}
-                  >
-                    Arise
-                  </button>
+                  {countdown > 0 ? (
+                    <button
+                      className="primary wide"
+                      disabled={code.length !== 6 || !!busy}
+                      onClick={() => complete(stage.key)}
+                    >
+                      Arise
+                    </button>
+                  ) : (
+                    <button
+                      className="primary wide"
+                      disabled={!!busy}
+                      onClick={() => requestCode(stage.key)}
+                    >
+                      Request a new code
+                    </button>
+                  )}
                 </>
               )}
 
