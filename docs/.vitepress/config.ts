@@ -10,13 +10,17 @@ const APP_URL = process.env.SUHO_APP_URL || "http://localhost:5173/";
 // together. Served at /docs/. Only the docs specs are VitePress sources; the
 // deployment notes, demo script, and README stay as their own files.
 export default defineConfig({
-  title: "Suho Docs",
+  title: "Suho 수호",
+  titleTemplate: ":title | Suho",
   description:
     "A wallet that guards you on GIWA. Send to names, recover without a seed phrase, live on GIWA Sepolia.",
   lang: "en",
   base: "/docs/",
   outDir: "../site/docs",
-  cleanUrls: true,
+  // .html links everywhere: robust on any static host (no clean-URL rewrite
+  // needed), and the docs are entered directly at what-is-suho, not a hero.
+  cleanUrls: false,
+  appearance: false, // one brand, hanji light. No dark toggle.
   srcExclude: [
     "deployments.md",
     "demo-script.md",

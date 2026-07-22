@@ -71,3 +71,42 @@ h1, h2, h3, h4, .VPNavBarTitle .title, .vp-doc h1, .vp-doc h2, .vp-doc h3 {
   border-color: var(--gild);
   background: #fbf3e4;
 }
+
+/* sidebar / content divider: a single hairline, never a heavy bar */
+.VPSidebar {
+  border-right: 1px solid var(--line) !important;
+  background: var(--hanji) !important;
+}
+.VPNavBar,
+.VPNavBar .divider,
+.VPNavBar .divider-line {
+  border-color: var(--line) !important;
+}
+.VPNav .divider-line {
+  background-color: var(--line) !important;
+}
+.VPContent {
+  background: var(--hanji);
+}
+
+/* theme the scrollbars so they read as hanji, not a broken dark bar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d6cec0 transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6cec0;
+  border-radius: 8px;
+  border: 2px solid var(--hanji);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c6bdac;
+}
+

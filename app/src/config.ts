@@ -1,9 +1,10 @@
 export const GUARDIAN = "http://localhost:8787";
 // The docs are a SEPARATE static origin (site/docs), not part of this SPA. A
-// relative "/docs/" would hit Vite's SPA fallback and route to Send, so this
-// must be an absolute URL to the docs origin. Env-configurable: set
-// VITE_DOCS_URL to the deployed docs URL; defaults to the local static server.
-export const DOCS_URL = import.meta.env.VITE_DOCS_URL ?? "http://localhost:8899/docs/";
+// relative path would hit Vite's SPA fallback and route to Send, so this must
+// be an absolute URL. It points straight at the first content page, never the
+// docs root (there is no docs hero). Env-configurable via VITE_DOCS_URL.
+export const DOCS_URL =
+  import.meta.env.VITE_DOCS_URL ?? "http://localhost:8899/docs/overview/what-is-suho.html";
 export const CHAIN_ID = 91342n;
 export const NORMAL_RPC = "https://sepolia-rpc.giwa.io";
 export const FLASH_RPC = "https://sepolia-rpc-flashblocks.giwa.io";

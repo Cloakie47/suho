@@ -124,9 +124,13 @@ The built output in `site/docs` is committed. There is no CI pipeline, GitHub
 Pages serves what is committed, and reproducibility lives in the `docs/` source.
 Rebuild and re-commit when the docs change.
 
+The docs open directly at the first content page. `/docs/` redirects to
+`/docs/overview/what-is-suho.html`, and every "Docs" link points there, so the
+docs never read as a second landing.
+
 Cross-origin links are env-configurable, because the app and docs are separate
 origins. The app's "Docs" link uses `VITE_DOCS_URL` (default
-`http://localhost:8899/docs/`). The docs "Launch app" link uses `SUHO_APP_URL`
-at build time (default `http://localhost:5173/`). Set both to the deployed URLs
-before a production build. Serve the whole thing locally with any static server
-over `site/` on port 8899 (`npx http-server site -p 8899`).
+`http://localhost:8899/docs/overview/what-is-suho.html`). The docs "Launch app"
+link uses `SUHO_APP_URL` at build time (default `http://localhost:5173/`). Set
+both to the deployed URLs before a production build. Links use `.html` (no
+clean-URL rewrite), so any static server works: `npx http-server site -p 8899`.
