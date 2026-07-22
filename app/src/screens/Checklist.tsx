@@ -33,7 +33,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
   const allDone = funded && verified && named && sent;
 
   useEffect(() => {
-    QRCode.toDataURL(account, { margin: 1, width: 132, color: { dark: "#f3efe7", light: "#1c1a18" } })
+    QRCode.toDataURL(account, { margin: 1, width: 132, color: { dark: "#1b1917", light: "#ffffff" } })
       .then(setQr, () => setQr(null));
   }, [account]);
 
@@ -170,7 +170,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
             {!named ? (
               <>
                 <div className="muted" style={{ margin: "4px 0" }}>
-                  Your up.id — claimed by the account itself, verified humans only.
+                  Your up.id. Claimed by the account itself.
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
@@ -204,7 +204,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>Send your first guarded transfer</div>
             <div className="muted" style={{ margin: "4px 0" }}>
-              Use the composer above — try <b>suho</b> and watch the seal resolve.
+              Use the composer above. Try <b>suho</b>.
             </div>
           </div>
         </div>

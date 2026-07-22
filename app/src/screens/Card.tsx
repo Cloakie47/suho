@@ -79,6 +79,9 @@ export function Card({ status }: { status: Status }) {
       <div className="screen-head">
         <p className="eyebrow">ATTESTED IDENTITY</p>
         <h1 className="screen-title">Suho Card</h1>
+        <p className="muted" style={{ margin: "6px 0 0" }}>
+          {status.upId ? `${status.upId}.up.id` : shortAddr(activeAccount())}&rsquo;s card
+        </p>
       </div>
 
       {!info ? (
@@ -155,8 +158,7 @@ export function Card({ status }: { status: Status }) {
                 {info.current && (
                   <div className="muted" style={{ marginTop: 8, fontSize: "0.8rem" }}>
                     One passkey signature attests the new version and revokes v
-                    {info.current.version} atomically. Nothing is deleted — the history stays
-                    walkable.
+                    {info.current.version}. Nothing is deleted.
                   </div>
                 )}
                 <button

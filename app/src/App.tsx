@@ -9,8 +9,139 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api, type Status } from "./api";
-import { activeAccount, hasAccount, isLegacyDemo, setActiveAccount, DEMO_ACCOUNT } from "./config";
+import {
+  activeAccount,
+  forgetAccount,
+  hasAccount,
+  isLegacyDemo,
+  knownAccounts,
+  setActiveAccount,
+  DEMO_ACCOUNT,
+} from "./config";
 import { Onboard } from "./screens/Onboard";
+
+interface KnownRow {
+  address: `0x${string}`;
+  upId: string | null;
+  verified: boolean;
+}
+
+/** Skill v2: there is no logout, there are accounts on this device. The
+ *  identity card opens this switcher. Switching signs nothing. */
+function AccountSwitcher({
+  onClose,
+  onSwitched,
+  onAddAccount,
+  onOpenAccount,
+}: {
+  onClose: () => void;
+  onSwitched: () => void;
+  onAddAccount: () => void;
+  onOpenAccount: () => void;
+}) {
+  const [rows, setRows] = useState<KnownRow[] | null>(null);
+  const current = activeAccount().toLowerCase();
+  const hasDemo = knownAccounts().some((a) => a.toLowerCase() === DEMO_ACCOUNT.toLowerCase());
+
+  const load = async () => {
+    const list = knownAccounts();
+    const out: KnownRow[] = [];
+    for (const address of list) {
+      try {
+        const s = await api.status(address);
+        out.push({ address, upId: s.upId, verified: s.isVerified });
+      } catch {
+        out.push({ address, upId: null, verified: false });
+      }
+    }
+    setRows(out);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const remove = (address: string) => {
+    const ok = window.confirm(
+      "Forget this account on this device? The account itself lives on chain. Your passkey stays in this device's credential manager.",
+    );
+    if (!ok) return;
+    forgetAccount(address);
+    if (address.toLowerCase() === current) {
+      const rest = knownAccounts();
+      setActiveAccount(rest[0] ?? DEMO_ACCOUNT);
+      onSwitched();
+    }
+    load();
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Accounts" onClick={onClose}>
+      <div className="l2 switcher" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ margin: "0 0 10px" }}>Accounts on this device</h2>
+        {!rows ? (
+          <div className="status-line">
+            <Spinner /> loading…
+          </div>
+        ) : (
+          rows.map((r) => {
+            const isCurrent = r.address.toLowerCase() === current;
+            return (
+              <div className="switch-row" key={r.address}>
+                <button
+                  className="switch-main"
+                  onClick={() => {
+                    if (isCurrent) {
+                      onOpenAccount();
+                    } else {
+                      setActiveAccount(r.address);
+                      onSwitched();
+                    }
+                    onClose();
+                  }}
+                >
+                  {r.verified ? <Seal small /> : <span className="gray-dot" aria-label="Unverified" />}
+                  <span className="switch-name">
+                    {r.upId ? `${r.upId}.up.id` : shortAddr(r.address)}
+                    {r.address.toLowerCase() === DEMO_ACCOUNT.toLowerCase() && (
+                      <span className="demo-tag">demo</span>
+                    )}
+                  </span>
+                  {isCurrent && <Check size={15} strokeWidth={2} color="var(--jade)" />}
+                </button>
+                <button className="switch-x" aria-label="Forget account" onClick={() => remove(r.address)}>
+                  ×
+                </button>
+              </div>
+            );
+          })
+        )}
+        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+          <button
+            className="primary"
+            onClick={() => {
+              onClose();
+              onAddAccount();
+            }}
+          >
+            Add account
+          </button>
+          {!hasDemo && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setActiveAccount(DEMO_ACCOUNT);
+                onSwitched();
+                onClose();
+              }}
+            >
+              Use demo account
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 import { Seal, Spinner, fmtEth, shortAddr } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
@@ -88,6 +219,14 @@ export default function App() {
   const [prefillRecipient, setPrefillRecipient] = useState<string | null>(null);
   const [verifyId, setVerifyId] = useState<string | null>(null);
   const [onboarded, setOnboarded] = useState(() => hasAccount());
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [addingAccount, setAddingAccount] = useState(false);
+
+  const switchRefresh = useCallback(() => {
+    setStatus(null);
+    setScreen("send");
+    refresh();
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -137,13 +276,14 @@ export default function App() {
   }
 
   // Phase O §O5: fresh browsers meet onboarding first; the demo account is the
-  // clearly-labeled legacy path.
-  if (!onboarded) {
+  // clearly-labeled legacy path. "Add account" from the switcher re-enters it.
+  if (!onboarded || addingAccount) {
     return (
       <Onboard
         onDone={() => {
           setStatus(null);
           setOnboarded(true);
+          setAddingAccount(false);
           setScreen("send");
           refresh();
         }}
@@ -151,6 +291,7 @@ export default function App() {
           setActiveAccount(DEMO_ACCOUNT);
           setStatus(null);
           setOnboarded(true);
+          setAddingAccount(false);
           setScreen("upgrade");
           refresh();
         }}
@@ -188,7 +329,7 @@ export default function App() {
         <div className="wordmark">
           Suho<span className="hanja">수호</span>
         </div>
-        {status && <IdentityCard status={status} onOpen={() => setScreen("upgrade")} />}
+        {status && <IdentityCard status={status} onOpen={() => setSwitcherOpen(true)} />}
         <nav className="nav" aria-label="Screens">
           {NAV.map((n) => (
             <button
@@ -221,8 +362,8 @@ export default function App() {
             <button
               className="bal"
               style={{ background: "none", border: 0, color: "inherit", cursor: "pointer" }}
-              onClick={() => setScreen("upgrade")}
-              title="Account & upgrade"
+              onClick={() => setSwitcherOpen(true)}
+              title="Accounts"
             >
               {fmtEth(status.balance)} ETH
             </button>
@@ -232,6 +373,15 @@ export default function App() {
           <div className="content">{body}</div>
         </main>
       </div>
+
+      {switcherOpen && (
+        <AccountSwitcher
+          onClose={() => setSwitcherOpen(false)}
+          onSwitched={switchRefresh}
+          onAddAccount={() => setAddingAccount(true)}
+          onOpenAccount={() => setScreen("upgrade")}
+        />
+      )}
 
       <nav className="tabbar" aria-label="Screens">
         {NAV.map((n) => (

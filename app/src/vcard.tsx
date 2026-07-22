@@ -32,7 +32,7 @@ export function VCard({
     QRCode.toDataURL(`${EXPLORER}/address/${address}`, {
       margin: 1,
       width: 152,
-      color: { dark: "#f3efe7", light: "#211d1a" },
+      color: { dark: "#1b1917", light: "#ffffff" },
     }).then(setQr, () => setQr(null));
   }, [address]);
 
@@ -63,17 +63,17 @@ export function VCard({
         <div className="vcard-head">
           {verified && <Seal />}
           <div>
-            <div className="vcard-name">{card.displayName || "—"}</div>
+            <div className="vcard-name">{card.displayName || "–"}</div>
             {upId && <div className="vcard-upid">{upId}.up.id</div>}
           </div>
           {qr && <img className="vcard-qr" src={qr} alt="QR: explorer link" />}
         </div>
         <div className="vcard-fields">
           <div>
-            <span className="vcard-label">contact</span> {card.contact || "—"}
+            <span className="vcard-label">contact</span> {card.contact || "–"}
           </div>
           <div>
-            <span className="vcard-label">remarks</span> {card.remarks || "—"}
+            <span className="vcard-label">remarks</span> {card.remarks || "–"}
           </div>
         </div>
         <div>

@@ -2,7 +2,7 @@ import type { Hex } from "viem";
 import { api } from "./api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "./chain";
 import { assertWithPasskey } from "./webauthn";
-import { activeAccount, LS_CREDENTIAL } from "./config";
+import { activeAccount, storedCredential } from "./config";
 
 /** Lifecycle hooks so the caller's toast can mutate as the tx progresses.
  *  `sent` fires once the relay accepted the tx (toast goes pending). */
@@ -21,8 +21,8 @@ export async function executeWithPasskey(
   hooks?: ExecuteHooks,
 ): Promise<{ txHash: Hex; preconfMs: number }> {
   const account = activeAccount();
-  const credentialId = localStorage.getItem(LS_CREDENTIAL);
-  if (!credentialId) throw new Error("No passkey linked on this device — visit Upgrade first.");
+  const credentialId = storedCredential();
+  if (!credentialId) throw new Error("No passkey linked on this device. Visit Upgrade first.");
   const nonce = await accountNonce(account);
   const challenge = computeChallenge(account, nonce, calls);
   const webauthn = await assertWithPasskey(credentialId, challenge);

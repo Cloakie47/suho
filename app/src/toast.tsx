@@ -162,7 +162,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   <div className="toast-label">
                     {t.label}
                     {t.ms !== undefined && t.ms > 0 && (
-                      <span className="toast-ms"> — {(t.ms / 1000).toFixed(1)}s</span>
+                      <span className="toast-ms"> · {(t.ms / 1000).toFixed(1)}s</span>
                     )}
                   </div>
                 )}

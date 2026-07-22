@@ -15,7 +15,7 @@ import {
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey } from "../webauthn";
-import { activeAccount, isLegacyDemo, LS_CREDENTIAL, OTP_THRESHOLD_WEI } from "../config";
+import { activeAccount, isLegacyDemo, storedCredential, OTP_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
@@ -56,14 +56,14 @@ function StatCards({ verifiedNames }: { verifiedNames: number | null }) {
         <div className="stat-label">
           Avg preconfirmation <Timer {...icon} />
         </div>
-        <div className="stat-value jade">{avgMs === null ? "—" : `${(avgMs / 1000).toFixed(1)}s`}</div>
+        <div className="stat-value jade">{avgMs === null ? "–" : `${(avgMs / 1000).toFixed(1)}s`}</div>
         <div className="stat-sub">flashblocks, measured live</div>
       </div>
       <div className="stat-card">
         <div className="stat-label">
           Verified recipients <Users {...icon} />
         </div>
-        <div className="stat-value">{verifiedNames === null ? "—" : verifiedNames.toLocaleString()}</div>
+        <div className="stat-value">{verifiedNames === null ? "–" : verifiedNames.toLocaleString()}</div>
         <div className="stat-sub">active up.id names</div>
       </div>
     </div>
@@ -115,7 +115,7 @@ function ActivityFeed({ bump }: { bump: number }) {
   return (
     <div className="card activity">
       <h2>Activity</h2>
-      {failed && <div className="muted" style={{ padding: "8px 0 16px" }}>Explorer unreachable — activity hidden.</div>}
+      {failed && <div className="muted" style={{ padding: "8px 0 16px" }}>Explorer unreachable. Activity hidden.</div>}
       {!items && !failed && (
         <div style={{ padding: "8px 0 16px", display: "grid", gap: 14 }}>
           {[80, 60, 70].map((w, i) => (
@@ -125,7 +125,7 @@ function ActivityFeed({ bump }: { bump: number }) {
       )}
       {items && items.length === 0 && (
         <div className="muted" style={{ padding: "8px 0 16px" }}>
-          No sends yet — try <b>suho.up.id</b>.
+          No sends yet. Try <b>suho.up.id</b>.
         </div>
       )}
       {items &&
@@ -251,7 +251,7 @@ function OtpModal({
           ))}
         </div>
         <div className="countdown">
-          {countdown > 0 ? "single-use · bound to this exact transfer" : "code expired — close and send again"}
+          {countdown > 0 ? "single-use · bound to this exact transfer" : "code expired. Close and send again."}
         </div>
         <button
           className="primary wide"
@@ -341,9 +341,9 @@ export function Send({
 
   const doSend = async (otpCode: string) => {
     if (!recipient || recipient.notFound) return;
-    const credentialId = localStorage.getItem(LS_CREDENTIAL);
+    const credentialId = storedCredential();
     if (!credentialId) {
-      setPhase({ k: "error", message: "No passkey linked on this device — visit Upgrade first." });
+      setPhase({ k: "error", message: "No passkey linked on this device. Visit Upgrade first." });
       return;
     }
     let value: bigint;
@@ -426,7 +426,7 @@ export function Send({
         <div className="composer-row">
           <input
             type="text"
-            placeholder="Recipient — name or 0x address"
+            placeholder="Recipient: name or 0x address"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             aria-label="Recipient"
@@ -469,14 +469,14 @@ export function Send({
                   </div>
                 </div>
               ) : (
-                <div className="warnbox">Unverified address — Suho can’t identify who this is.</div>
+                <div className="warnbox">Unverified address. Suho can’t identify who this is.</div>
               )}
             </div>
           </div>
         )}
         {willOtp && (
           <div className="warnbox">
-            Large transfer to an unverified address — a verification code will be required.
+            Large transfer to an unverified address. A verification code is required.
           </div>
         )}
         {phase.k === "signing" && (

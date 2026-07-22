@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, type Status } from "../api";
 import { createPasskey } from "../webauthn";
-import { DEMO_ACCOUNT, EXPLORER, isLegacyDemo, LS_CREDENTIAL } from "../config";
+import { DEMO_ACCOUNT, EXPLORER, isLegacyDemo, storedCredential, storeCredential } from "../config";
 import { Seal, Spinner, shortAddr } from "../ui";
 
 /** R5: no screen is a single element in a void — success is a two-col
@@ -21,7 +21,7 @@ function MiniCardPreview({ status }: { status: Status }) {
           <span className="vcard-label">secured by</span> passkey · P-256
         </div>
         <div>
-          <span className="vcard-label">recovery</span> Arise — one code, no seed phrase
+          <span className="vcard-label">recovery</span> Arise: one code. No seed phrase.
         </div>
       </div>
       <div className="vcard-meta">
@@ -36,14 +36,14 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ txHash: string; code: string } | null>(null);
-  const hasCredential = !!localStorage.getItem(LS_CREDENTIAL);
+  const hasCredential = !!storedCredential();
 
   const linkExisting = async () => {
     setBusy("Linking this device's passkey…");
     setError(null);
     try {
       const { credentialId } = await api.demoCredential();
-      localStorage.setItem(LS_CREDENTIAL, credentialId);
+      storeCredential(DEMO_ACCOUNT, credentialId);
       onDone();
     } catch (e) {
       setError(String(e));
@@ -57,7 +57,7 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
     try {
       setBusy("Waiting for Windows Hello…");
       const passkey = await createPasskey("alice@suho");
-      localStorage.setItem(LS_CREDENTIAL, passkey.credentialId);
+      storeCredential(DEMO_ACCOUNT, passkey.credentialId);
       setBusy("Upgrading wallet on GIWA…");
       const res = await api.upgrade(DEMO_ACCOUNT, { x: passkey.x, y: passkey.y });
       setResult({ txHash: res.txHash, code: res.code });
@@ -83,9 +83,8 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
             <>
               <div className="big-check">✓</div>
               <div className="hero center">Same address. Same name. New powers.</div>
-              <p className="muted center">
-                This address is now a smart account, secured by your passkey. The old key can go in
-                a drawer.
+              <p className="muted center" title="The original EOA key is no longer needed day to day.">
+                This address is now a smart account. Your passkey controls it.
               </p>
               {result && (
                 <p className="mono muted center">
@@ -116,8 +115,7 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
             <>
               <div className="hero">Upgrade to Suho</div>
               <p className="muted">
-                Create a passkey, then upgrade this wallet in place — keeping your verified identity
-                and your up.id name.
+                Create a passkey and upgrade this wallet in place. Your name and verification stay.
               </p>
               <button className="primary wide" onClick={upgrade} disabled={!!busy}>
                 {busy ?? "Create your Suho passkey & upgrade"}
@@ -141,21 +139,21 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
         <div className="stat-card">
           <div className="stat-label">Same address</div>
           <div style={{ fontSize: "0.88rem" }}>
-            EIP-7702 upgrades the account in place — Dojang attestation and up.id survive.
+            The upgrade keeps your address. Your name and verification stay.
           </div>
           <div className="stat-sub">type-4 delegation · 0xef0100 code</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Passkey signs</div>
           <div style={{ fontSize: "0.88rem" }}>
-            Day-to-day authority is a WebAuthn P-256 key; the EOA key goes in a drawer.
+            Your passkey signs every transaction.
           </div>
           <div className="stat-sub">P256VERIFY · native precompile</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Recoverable</div>
           <div style={{ fontSize: "0.88rem" }}>
-            A lost device is one verification code from a new passkey — no seed phrase.
+            Arise: one code. No seed phrase.
           </div>
           <div className="stat-sub">Arise · single-use codes</div>
         </div>

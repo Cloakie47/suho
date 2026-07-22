@@ -103,7 +103,7 @@ export async function fetchActivity(): Promise<ActivityItem[]> {
         out.push({ ...base, kind: "send", title: "Passkey transaction" });
       }
     } else if (to === ARISE_MODULE.toLowerCase()) {
-      out.push({ ...base, kind: "arise", title: "Passkey rotated — Arise" });
+      out.push({ ...base, kind: "arise", title: "Passkey rotated (Arise)" });
     } else if (to === acct && from === acct && input.startsWith("0x1f57365e")) {
       out.push({ ...base, kind: "upgrade", title: "Upgraded to smart account (EIP-7702)" });
     } else if (to === acct && from !== acct && input === "0x" && BigInt(tx.value) > 0n) {

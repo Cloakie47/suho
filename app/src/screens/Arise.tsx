@@ -3,7 +3,7 @@ import { encodeAbiParameters, keccak256, parseEther, type Hex } from "viem";
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
-import { activeAccount, EXPLORER, LS_CREDENTIAL } from "../config";
+import { activeAccount, EXPLORER, storedCredential, storeCredential } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { recordSend } from "../stats";
@@ -37,7 +37,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   const [code, setCode] = useState("");
   const [countdown, setCountdown] = useState(0);
   const [proof, setProof] = useState<ProofState>({});
-  const [oldCredentialId] = useState(() => localStorage.getItem(LS_CREDENTIAL));
+  const [oldCredentialId] = useState(() => storedCredential());
   const toast = useToast();
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   }, [stage]);
 
   const createNew = async () => {
-    setBusy("Waiting for Windows Hello — this is the NEW device's passkey…");
+    setBusy("Waiting for Windows Hello. This is the new device's passkey…");
     try {
       const key = await createPasskey("alice@suho (recovered)");
       setStage({ k: "created", key });
@@ -88,7 +88,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
         final: () => handle.final(r.txHash),
         reverted: () => handle.error(new Error("TransactionReverted")),
       });
-      localStorage.setItem(LS_CREDENTIAL, key.credentialId);
+      storeCredential(activeAccount(), key.credentialId);
       setStage({ k: "arisen", key, txHash: r.txHash, ms: timing.preconfMs });
       refresh();
     } catch (e) {
@@ -127,7 +127,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
         ...p,
         [label]: {
           ok: true,
-          detail: `sent — ${shortAddr(txHash)} (${(timing.preconfMs / 1000).toFixed(1)}s)`,
+          detail: `sent · ${shortAddr(txHash)} (${(timing.preconfMs / 1000).toFixed(1)}s)`,
           ms: timing.preconfMs,
         },
       }));
@@ -168,8 +168,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
             <div className="card">
               <h2>Lost your device?</h2>
               <p className="muted">
-                Arise rotates your account to a new passkey — same address, same name — authorized
-                only by a single-use verification code bound to this exact recovery.
+                Arise moves your account to a new passkey. One single-use code, bound to this exact recovery, authorizes it.
               </p>
 
               {stage.k === "intro" && (
@@ -203,7 +202,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
                   <div className="countdown">
                     {countdown > 0
                       ? `code expires in ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, "0")}`
-                      : "code expired — go back and request a new one"}
+                      : "code expired. Request a new one."}
                   </div>
                   <button
                     className="primary wide"
@@ -224,7 +223,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
               <div className="card center">
                 <div className="big-check">✓</div>
                 <div className="hero">You have risen.</div>
-                <p className="muted">Same address, same name, new key.</p>
+                <p className="muted">Same address and name, new key.</p>
                 <p className="mono muted">
                   arise tx:{" "}
                   <a href={`${EXPLORER}/tx/${stage.txHash}`} target="_blank" rel="noreferrer">
@@ -239,7 +238,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
                 <div className="card hover prove-card">
                   <div className="prove-mark no">✗</div>
                   <h2>Old passkey</h2>
-                  <p className="muted">Should be rejected on-chain — the rotation is real.</p>
+                  <p className="muted">Should be rejected on-chain. The rotation is real.</p>
                   {oldCredentialId && oldCredentialId !== stage.key.credentialId ? (
                     <>
                       <button
@@ -253,7 +252,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
                         <div className={proof.old.ok ? "errbox" : "okbox"}>
                           {proof.old.ok
                             ? `unexpected: ${proof.old.detail}`
-                            : `✗ rejected: ${proof.old.detail} — the old key is dead`}
+                            : `✗ rejected: ${proof.old.detail}. The old key is dead.`}
                         </div>
                       )}
                     </>
@@ -264,7 +263,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
                 <div className="card hover prove-card">
                   <div className="prove-mark yes">✓</div>
                   <h2>New passkey</h2>
-                  <p className="muted">Sends normally — same address, new authority.</p>
+                  <p className="muted">Sends normally. Same address, new authority.</p>
                   <button
                     className="secondary"
                     onClick={() => proveSend(stage.key.credentialId, "fresh")}
@@ -293,22 +292,22 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
               <div className="stat-card">
                 <div className="stat-label">Purpose-bound</div>
                 <div style={{ fontSize: "0.88rem" }}>
-                  The code commits to this account AND the new key's hash — it can't rotate in any
-                  other key.
+                  The code commits to this account and the new key. It can't rotate in any other
+                  key.
                 </div>
                 <div className="stat-sub">domain: suho.arise:&lt;account&gt;:&lt;keyhash&gt;</div>
               </div>
               <div className="stat-card">
                 <div className="stat-label">Single-use</div>
                 <div style={{ fontSize: "0.88rem" }}>
-                  Consumed on-chain the moment it verifies; a replayed or observed code is dead.
+                  Consumed on-chain the moment it verifies. A replayed code is dead.
                 </div>
                 <div className="stat-sub">EAS attestation · verifyAndConsume</div>
               </div>
               <div className="stat-card">
                 <div className="stat-label">Relayable</div>
                 <div style={{ fontSize: "0.88rem" }}>
-                  Anyone may submit the recovery — authority is the code itself, never the caller.
+                  Anyone may relay the recovery. The code itself is the authority.
                 </div>
                 <div className="stat-sub">no gas needed on the lost account</div>
               </div>

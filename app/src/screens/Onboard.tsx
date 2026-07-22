@@ -7,7 +7,7 @@ import {
   DEMO_ACCOUNT,
   EXPLORER,
   GUARD_ADDRESS,
-  LS_CREDENTIAL,
+  storeCredential,
   ONDOL_V2_IMPL,
   setActiveAccount,
 } from "../config";
@@ -94,17 +94,17 @@ export function Onboard({
 
   const create = async () => {
     try {
-      setStage({ k: "working", note: "Creating your passkey — this is your key. No seed phrase exists." });
+      setStage({ k: "working", note: "Creating your passkey. No seed phrase exists." });
       const passkey = await createPasskey("suho account");
-      localStorage.setItem(LS_CREDENTIAL, passkey.credentialId);
 
       setStage({ k: "working", note: "Preparing your account…" });
       const { address, authorization, initSig } = await bootstrapSignatures({
         x: passkey.x,
         y: passkey.y,
       });
+      storeCredential(address, passkey.credentialId);
 
-      setStage({ k: "working", note: "Activating on GIWA — the guardian pays the gas…" });
+      setStage({ k: "working", note: "Activating on GIWA. The guardian pays the gas…" });
       const r = await api.onboard({
         address,
         authorization,
@@ -140,8 +140,7 @@ export function Onboard({
             </div>
             <div className="hero">A wallet that guards you.</div>
             <p className="muted">
-              A passkey-secured account on GIWA — no seed phrase, no extension, no gas needed to
-              start. Your device's passkey is the only key.
+              A passkey account on GIWA. No seed phrase, no gas to start.
             </p>
             <button className="primary wide" onClick={create}>
               Create your Suho account
@@ -166,7 +165,7 @@ export function Onboard({
             <div className="hero">Your account exists.</div>
             <p className="mono muted">{stage.address}</p>
             <p className="muted">
-              Not yet verified · balance 0 — the guided steps on your home screen finish the setup.
+              Not yet verified, balance 0. The guided steps on your home screen finish the setup.
             </p>
             <p className="mono muted">
               <a href={`${EXPLORER}/tx/${stage.txHash}`} target="_blank" rel="noreferrer">
