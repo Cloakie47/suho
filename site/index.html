@@ -23,7 +23,7 @@
     <section class="hero">
       <div class="hero-copy">
         <h1>A wallet that guards&nbsp;you.</h1>
-        <p class="sub">Send to names, not addresses. Recover without a seed phrase. Live on GIWA.</p>
+        <p class="sub">Start with nothing. Send to names, not addresses. No seed phrase, ever.</p>
         <div class="ctas">
           <a class="btn btn-primary" href="#demo">Watch the demo</a>
           <a class="btn btn-ghost" href="https://github.com/Cloakie47/suho">View the code</a>
@@ -68,6 +68,14 @@
       <p class="eyebrow reveal" style="--i:0"><span lang="ko">지붕 아래</span> — under the roof</p>
       <h2 class="reveal" style="--i:1">How Suho guards</h2>
       <div class="grid">
+        <article class="gcard wide reveal" style="--i:0">
+          <img src="assets/shots/crop-onboard.png" alt="App screenshot: the onboarding screen offering 'Create your Suho account' with the red Suho seal" />
+          <div>
+            <h3>Start with nothing</h3>
+            <p>A fresh browser becomes a passkey-controlled, verified, named account. The bootstrap key is generated in-tab, signs twice, and is destroyed — the guardian just pays the gas.</p>
+            <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42">gasless onboarding · 0xf00b…ce42</a>
+          </div>
+        </article>
         <article class="gcard reveal" style="--i:0">
           <img src="assets/shots/crop-verified.png" alt="App screenshot: suho.up.id resolved with the red verification seal and the label 'Verified human'" />
           <h3>Verified humans</h3>
@@ -102,7 +110,7 @@
         <li class="reveal" style="--i:0"><a class="cred" href="https://sepolia-explorer.giwa.io/address/0xacc2a6Eb741E147e8D3Ed9213b070656c908Adad">First EIP-7702 passkey account on GIWA</a></li>
         <li class="reveal" style="--i:1"><a href="https://github.com/Cloakie47/suho#probe-findings-empirical-on-live-giwa-sepolia"><span class="jade">~0.9s</span> preconfirmation</a></li>
         <li class="reveal" style="--i:2"><a href="https://github.com/Cloakie47/suho/blob/main/docs/deployments.md">4 contracts source-verified</a></li>
-        <li class="reveal" style="--i:3"><a href="https://sepolia-explorer.giwa.io/token/0x091D00004f21eb2Fc30964A8a4995692d9b49628">55,048 verified names indexed</a></li>
+        <li class="reveal" style="--i:3"><a href="https://sepolia-explorer.giwa.io/token/0x091D00004f21eb2Fc30964A8a4995692d9b49628">51,843 verified names indexed</a></li>
       </ul>
     </section>
 
@@ -151,6 +159,18 @@
               <td>Identity card self-attested through the account</td>
               <td class="mono dim">Jul 21</td>
               <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0x5cbfba2ea0e076948d6eeb411c349f47cb0b4fa91339cf3321098e1df08ab167">0x5cbf…b167</a></td>
+            </tr>
+            <tr>
+              <td class="tick">✓</td>
+              <td>Account upgraded v1 → v2 in place — state intact, no re-init</td>
+              <td class="mono dim">Jul 21</td>
+              <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0x2a24fa95278db11517d9af46e9b43d9046784d82ab1f1cdec0972bd6316598af">0x2a24…98af</a></td>
+            </tr>
+            <tr>
+              <td class="tick">✓</td>
+              <td>Stranger onboarded gasless — key never left the browser</td>
+              <td class="mono dim">Jul 22</td>
+              <td><a class="mono" href="https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42">0xf00b…ce42</a></td>
             </tr>
           </tbody>
         </table>

@@ -180,6 +180,11 @@ h2 {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--line); border-radius: 14px; padding: 18px;
 }
+/* the onboarding moment leads the grid, full width, image beside copy */
+.gcard.wide { grid-column: 1 / -1; display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: center; }
+.gcard.wide img { margin-bottom: 0; }
+@media (max-width: 860px) { .gcard.wide { grid-template-columns: 1fr; } .gcard.wide img { margin-bottom: 14px; } }
+
 /* crops are captured at a uniform 4:3 (560x420 @2x) — no CSS re-cropping */
 .gcard img {
   width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
