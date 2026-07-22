@@ -12,7 +12,8 @@ import {
   setActiveAccount,
 } from "../config";
 import { createPasskey } from "../webauthn";
-import { Seal, Spinner, TileDivider, shortAddr } from "../ui";
+import { humanError } from "../errors";
+import { Seal, Spinner, shortAddr } from "../ui";
 
 type Stage =
   | { k: "intro" }
@@ -20,66 +21,67 @@ type Stage =
   | { k: "done"; address: Hex; txHash: Hex }
   | { k: "error"; message: string };
 
-/**
- * Phase O §O5 step 2 — the ONE-TIME BOOTSTRAP KEY.
- *
- * EIP-7702 needs a secp256k1 signature to authorize the delegation and the
- * first passkey. We generate that key HERE, in this function's scope, use it
- * for exactly two signatures, and let it go out of scope:
- *   - it is never put in React state, never rendered, never logged
- *   - it is never written to localStorage/sessionStorage/IndexedDB/cookies
- *   - it is never sent over the network — only the SIGNATURES travel
- * After onboarding the passkey is the sole practical authority; the discarded
- * bootstrap key is unrecoverable by anyone, including us (see README threat
- * model for the 7702 root-key honesty note).
- */
-async function bootstrapSignatures(passkey: { x: Hex; y: Hex }): Promise<{
+interface Bootstrap {
   address: Hex;
-  authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
-  initSig: { v: number; r: Hex; s: Hex };
-}> {
+  sign(passkey: { x: Hex; y: Hex }): Promise<{
+    authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
+    initSig: { v: number; r: Hex; s: Hex };
+  }>;
+}
+
+/**
+ * The bootstrap key is generated HERE so its ADDRESS is known before the
+ * passkey is created (the passkey is then labelled with that address). The key
+ * lives only in this closure across the passkey-creation await, is used for
+ * exactly two signatures, and every reference is dropped in sign():
+ *   - never in React state, never rendered, never logged
+ *   - never in localStorage/sessionStorage/IndexedDB/cookies
+ *   - never sent over the network. Only the SIGNATURES travel.
+ * See README for the 7702 root-key threat model.
+ */
+function makeBootstrap(): Bootstrap {
   let pk: Hex | null = generatePrivateKey();
   let eoa: ReturnType<typeof privateKeyToAccount> | null = privateKeyToAccount(pk);
   const address = eoa.address;
-
-  // signature 1: the 7702 authorization (nonce 0 — fresh EOA, relayer submits)
-  const auth = await eoa.signAuthorization({
-    contractAddress: ONDOL_V2_IMPL,
-    chainId: 91342,
-    nonce: 0,
-  });
-
-  // signature 2: EIP-712 digest authorizing the first passkey (OndolAccountV2)
-  const sig = await eoa.signTypedData({
-    domain: { name: "Suho Ondol", version: "2", chainId: 91342, verifyingContract: address },
-    types: {
-      Init: [
-        { name: "x", type: "bytes32" },
-        { name: "y", type: "bytes32" },
-        { name: "guard", type: "address" },
-        { name: "arise", type: "address" },
-      ],
-    },
-    primaryType: "Init",
-    message: { x: passkey.x, y: passkey.y, guard: GUARD_ADDRESS, arise: ARISE_ADDRESS },
-  });
-  const parsed = parseSignature(sig);
-
-  // the key's job is done — drop every reference before returning
-  pk = null;
-  eoa = null;
-
   return {
     address,
-    authorization: {
-      address: auth.address ?? ONDOL_V2_IMPL,
-      chainId: 91342,
-      nonce: 0,
-      r: auth.r,
-      s: auth.s,
-      yParity: auth.yParity ?? 0,
+    async sign(passkey) {
+      const acct = eoa!;
+      // signature 1: 7702 authorization (nonce 0, fresh EOA, relayer submits)
+      const auth = await acct.signAuthorization({
+        contractAddress: ONDOL_V2_IMPL,
+        chainId: 91342,
+        nonce: 0,
+      });
+      // signature 2: EIP-712 digest authorizing the first passkey
+      const sig = await acct.signTypedData({
+        domain: { name: "Suho Ondol", version: "2", chainId: 91342, verifyingContract: address },
+        types: {
+          Init: [
+            { name: "x", type: "bytes32" },
+            { name: "y", type: "bytes32" },
+            { name: "guard", type: "address" },
+            { name: "arise", type: "address" },
+          ],
+        },
+        primaryType: "Init",
+        message: { x: passkey.x, y: passkey.y, guard: GUARD_ADDRESS, arise: ARISE_ADDRESS },
+      });
+      const parsed = parseSignature(sig);
+      pk = null;
+      eoa = null; // key's job is done, drop every reference
+      return {
+        authorization: {
+          address: auth.address ?? ONDOL_V2_IMPL,
+          chainId: 91342,
+          nonce: 0,
+          r: auth.r,
+          s: auth.s,
+          yParity: auth.yParity ?? 0,
+        },
+        initSig: { v: Number(parsed.v ?? BigInt(27 + (parsed.yParity ?? 0))), r: parsed.r, s: parsed.s },
+      };
     },
-    initSig: { v: Number(parsed.v ?? BigInt(27 + (parsed.yParity ?? 0))), r: parsed.r, s: parsed.s },
   };
 }
 
@@ -94,15 +96,16 @@ export function Onboard({
 
   const create = async () => {
     try {
+      // Bootstrap first so the passkey can be labelled with the account address.
+      const boot = makeBootstrap();
+      const address = boot.address;
+
       setStage({ k: "working", note: "Creating your passkey. No seed phrase exists." });
-      const passkey = await createPasskey("suho account");
+      const passkey = await createPasskey(`suho ${shortAddr(address)}`);
+      storeCredential(address, passkey.credentialId);
 
       setStage({ k: "working", note: "Preparing your account…" });
-      const { address, authorization, initSig } = await bootstrapSignatures({
-        x: passkey.x,
-        y: passkey.y,
-      });
-      storeCredential(address, passkey.credentialId);
+      const { authorization, initSig } = await boot.sign({ x: passkey.x, y: passkey.y });
 
       setStage({ k: "working", note: "Activating on GIWA. The guardian pays the gas…" });
       const r = await api.onboard({
@@ -117,7 +120,7 @@ export function Onboard({
       setActiveAccount(address);
       setStage({ k: "done", address, txHash: r.txHash });
     } catch (e) {
-      setStage({ k: "error", message: String(e) });
+      setStage({ k: "error", message: humanError(e).text });
     }
   };
 
@@ -172,7 +175,7 @@ export function Onboard({
                 activation tx {shortAddr(stage.txHash)}
               </a>
             </p>
-            <TileDivider />
+            <hr className="hairline" />
             <button className="primary wide" onClick={onDone}>
               Enter Suho
             </button>

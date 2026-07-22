@@ -15,11 +15,12 @@ import {
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey } from "../webauthn";
-import { activeAccount, isLegacyDemo, storedCredential, OTP_THRESHOLD_WEI } from "../config";
+import { activeAccount, isLegacyDemo, storedCredential, GUARDIAN, OTP_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { fetchActivity, type ActivityItem } from "../activity";
+import { humanError } from "../errors";
 import { recordSend, sessionStats, measuredMs } from "../stats";
 
 interface Recipient {
@@ -229,7 +230,11 @@ function OtpModal({
           </div>
         </div>
         <p className="muted" style={{ margin: "6px 0 0" }}>
-          Enter the code from the verification service.
+          Enter the code from the{" "}
+          <a href={`${GUARDIAN}/issuer`} target="_blank" rel="noreferrer">
+            verification service
+          </a>
+          .
         </p>
         <div className="code-boxes">
           {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -402,7 +407,7 @@ export function Send({
         setPhase(fromOtp ?? { k: "idle" }); // bad code: reopen the interstitial
       } else {
         // pre-relay failures (e.g. passkey prompt cancelled) stay inline
-        setPhase({ k: "error", message: String(e) });
+        setPhase({ k: "error", message: humanError(e).text });
       }
     }
   };

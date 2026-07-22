@@ -109,7 +109,6 @@ h1 {
 .card-name { font-family: var(--display); font-weight: 600; font-size: 1.55rem; }
 .card-upid { color: var(--seal-deep); font-size: 1rem; }
 .card-qr { border-radius: 8px; width: 72px; height: 72px; }
-.card-curve { width: 58%; margin: 0 auto; opacity: 0.14; }
 .card-bottom { display: flex; align-items: center; justify-content: space-between; }
 .chip {
   font-family: var(--mono); font-size: 0.8rem; color: var(--gild);
@@ -239,7 +238,6 @@ footer {
 .foot-links a:hover { color: var(--seal-deep); }
 .built { color: var(--ink-dim); font-size: 0.9rem; margin: 4px 0 0; }
 .honesty { color: var(--ink-dim); font-size: 0.78rem; font-style: italic; max-width: 52ch; margin: 2px 0 10px; }
-.tile-off { opacity: 0.85; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {

@@ -11,35 +11,51 @@ import {
 import { api, type Status } from "./api";
 import {
   activeAccount,
+  credentialFor,
   forgetAccount,
   hasAccount,
   isLegacyDemo,
   knownAccounts,
+  rememberAccount,
   setActiveAccount,
+  storeCredential,
   DEMO_ACCOUNT,
 } from "./config";
+import { accountPasskey, isOndolAccount } from "./chain";
+import { relinkPasskey } from "./webauthn";
 import { Onboard } from "./screens/Onboard";
 
 interface KnownRow {
   address: `0x${string}`;
   upId: string | null;
   verified: boolean;
+  credentialId: string | null;
 }
 
 /** Skill v2: there is no logout, there are accounts on this device. The
- *  identity card opens this switcher. Switching signs nothing. */
+ *  identity card opens this switcher. Switching signs nothing; it just changes
+ *  which account is active. Linking is a one-time re-attach of a passkey
+ *  already on this device. Arise is only for a genuinely lost key. */
 function AccountSwitcher({
   onClose,
   onSwitched,
   onAddAccount,
   onOpenAccount,
+  onRecover,
 }: {
   onClose: () => void;
   onSwitched: () => void;
   onAddAccount: () => void;
   onOpenAccount: () => void;
+  onRecover: (address: `0x${string}`) => void;
 }) {
   const [rows, setRows] = useState<KnownRow[] | null>(null);
+  const [linkErr, setLinkErr] = useState<Record<string, string>>({});
+  const [linking, setLinking] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [addr, setAddr] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
   const current = activeAccount().toLowerCase();
   const hasDemo = knownAccounts().some((a) => a.toLowerCase() === DEMO_ACCOUNT.toLowerCase());
 
@@ -49,9 +65,9 @@ function AccountSwitcher({
     for (const address of list) {
       try {
         const s = await api.status(address);
-        out.push({ address, upId: s.upId, verified: s.isVerified });
+        out.push({ address, upId: s.upId, verified: s.isVerified, credentialId: credentialFor(address) });
       } catch {
-        out.push({ address, upId: null, verified: false });
+        out.push({ address, upId: null, verified: false, credentialId: credentialFor(address) });
       }
     }
     setRows(out);
@@ -60,6 +76,70 @@ function AccountSwitcher({
     load();
   }, []);
 
+  /** Chain-verified relink: user picks a passkey; it is stored only if its
+   *  signature verifies against the account's on-chain P-256 key. */
+  const link = async (address: `0x${string}`) => {
+    setLinking(address);
+    setLinkErr((m) => ({ ...m, [address]: "" }));
+    try {
+      const expected = await accountPasskey(address);
+      const credentialId = await relinkPasskey(expected);
+      storeCredential(address, credentialId);
+      await load();
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      // A cancelled/absent prompt (NotAllowedError) or a key that verifies
+      // against a different account both mean the same thing to the user: the
+      // right passkey isn't on this device. Offer Arise.
+      const msg =
+        e instanceof DOMException || /timed out|not allowed|NotAllowed/i.test(raw)
+          ? "No matching passkey on this device."
+          : raw.startsWith("That passkey")
+            ? raw
+            : "Couldn't link a passkey to this account.";
+      setLinkErr((m) => ({ ...m, [address]: msg }));
+    } finally {
+      setLinking(null);
+    }
+  };
+
+  /** Add existing account: validate it is one of our Ondol accounts on chain,
+   *  register it, then run the relink. Works from a fully cleared cache
+   *  because everything is reconstructed from chain plus a passkey pick. */
+  const addExisting = async () => {
+    const a = addr.trim();
+    setAddErr(null);
+    if (!/^0x[0-9a-fA-F]{40}$/.test(a)) {
+      setAddErr("Enter a valid 0x address.");
+      return;
+    }
+    if (knownAccounts().some((k) => k.toLowerCase() === a.toLowerCase())) {
+      setAddErr("That account is already on this device.");
+      return;
+    }
+    setAddBusy(true);
+    try {
+      let ondol: boolean;
+      try {
+        ondol = await isOndolAccount(a as `0x${string}`);
+      } catch {
+        setAddErr("Couldn't reach GIWA to check that address. Try again.");
+        return;
+      }
+      if (!ondol) {
+        setAddErr("That address is not a Suho account on GIWA.");
+        return;
+      }
+      rememberAccount(a);
+      setAdding(false);
+      setAddr("");
+      await load();
+      await link(a as `0x${string}`); // straight into the passkey pick
+    } finally {
+      setAddBusy(false);
+    }
+  };
+
   const remove = (address: string) => {
     const ok = window.confirm(
       "Forget this account on this device? The account itself lives on chain. Your passkey stays in this device's credential manager.",
@@ -67,7 +147,7 @@ function AccountSwitcher({
     if (!ok) return;
     forgetAccount(address);
     if (address.toLowerCase() === current) {
-      const rest = knownAccounts();
+      const rest = knownAccounts().filter((a) => a.toLowerCase() !== address.toLowerCase());
       setActiveAccount(rest[0] ?? DEMO_ACCOUNT);
       onSwitched();
     }
@@ -77,7 +157,10 @@ function AccountSwitcher({
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Accounts" onClick={onClose}>
       <div className="l2 switcher" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: "0 0 10px" }}>Accounts on this device</h2>
+        <h2 style={{ margin: "0 0 4px" }}>Accounts on this device</h2>
+        <p className="muted" style={{ margin: "0 0 12px", fontSize: "0.8rem" }}>
+          Switching just changes the active account. It signs nothing.
+        </p>
         {!rows ? (
           <div className="status-line">
             <Spinner /> loading…
@@ -85,64 +168,119 @@ function AccountSwitcher({
         ) : (
           rows.map((r) => {
             const isCurrent = r.address.toLowerCase() === current;
+            const err = linkErr[r.address];
             return (
-              <div className="switch-row" key={r.address}>
-                <button
-                  className="switch-main"
-                  onClick={() => {
-                    if (isCurrent) {
-                      onOpenAccount();
-                    } else {
-                      setActiveAccount(r.address);
-                      onSwitched();
-                    }
-                    onClose();
-                  }}
-                >
-                  {r.verified ? <Seal small /> : <span className="gray-dot" aria-label="Unverified" />}
-                  <span className="switch-name">
-                    {r.upId ? `${r.upId}.up.id` : shortAddr(r.address)}
-                    {r.address.toLowerCase() === DEMO_ACCOUNT.toLowerCase() && (
-                      <span className="demo-tag">demo</span>
-                    )}
-                  </span>
-                  {isCurrent && <Check size={15} strokeWidth={2} color="var(--jade)" />}
-                </button>
-                <button className="switch-x" aria-label="Forget account" onClick={() => remove(r.address)}>
-                  ×
-                </button>
+              <div key={r.address}>
+                <div className="switch-row">
+                  <button
+                    className="switch-main"
+                    onClick={() => {
+                      if (isCurrent) {
+                        onOpenAccount();
+                      } else {
+                        setActiveAccount(r.address);
+                        onSwitched();
+                      }
+                      onClose();
+                    }}
+                  >
+                    {r.verified ? <Seal small /> : <span className="gray-dot" aria-label="Unverified" />}
+                    <span className="switch-name">
+                      {r.upId ? `${r.upId}.up.id` : shortAddr(r.address)}
+                      {r.address.toLowerCase() === DEMO_ACCOUNT.toLowerCase() && (
+                        <span className="demo-tag">demo</span>
+                      )}
+                      <span className="cred-line">
+                        {r.credentialId ? `key ${r.credentialId.slice(0, 8)}…` : "no key on this device"}
+                      </span>
+                    </span>
+                    {isCurrent && <Check size={15} strokeWidth={2} color="var(--jade)" />}
+                  </button>
+                  {!r.credentialId && (
+                    <button
+                      className="switch-link"
+                      disabled={linking !== null}
+                      onClick={() => link(r.address)}
+                    >
+                      {linking === r.address ? "…" : "Link"}
+                    </button>
+                  )}
+                  <button className="switch-x" aria-label="Forget account" onClick={() => remove(r.address)}>
+                    ×
+                  </button>
+                </div>
+                {!r.credentialId && err && (
+                  <div className="link-fallback">
+                    <span className="errbox" style={{ margin: 0 }}>{err}</span>
+                    <button className="switch-link" onClick={() => onRecover(r.address)}>
+                      Recover with Arise
+                    </button>
+                  </div>
+                )}
+                {!r.credentialId && !err && (
+                  <div className="cred-hint">
+                    Link re-attaches a passkey already on this device. One time, signs nothing.
+                  </div>
+                )}
               </div>
             );
           })
         )}
+
         <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-          <button
-            className="primary"
-            onClick={() => {
-              onClose();
-              onAddAccount();
-            }}
-          >
-            Add account
-          </button>
-          {!hasDemo && (
-            <button
-              className="secondary"
-              onClick={() => {
-                setActiveAccount(DEMO_ACCOUNT);
-                onSwitched();
-                onClose();
-              }}
-            >
-              Use demo account
-            </button>
+          {adding ? (
+            <div className="add-existing">
+              <input
+                type="text"
+                placeholder="0x address of your Suho account"
+                value={addr}
+                onChange={(e) => setAddr(e.target.value)}
+                aria-label="Account address"
+              />
+              {addErr && <div className="errbox">{addErr}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="primary" style={{ flex: 1 }} disabled={addBusy} onClick={addExisting}>
+                  {addBusy ? "Checking…" : "Find & link"}
+                </button>
+                <button className="secondary" style={{ margin: 0 }} onClick={() => { setAdding(false); setAddErr(null); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                className="primary"
+                onClick={() => {
+                  onClose();
+                  onAddAccount();
+                }}
+              >
+                Add account
+              </button>
+              <button className="secondary" onClick={() => setAdding(true)}>
+                Add existing account
+              </button>
+              {!hasDemo && (
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    setActiveAccount(DEMO_ACCOUNT);
+                    onSwitched();
+                    onClose();
+                  }}
+                >
+                  Use demo account
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
     </div>
   );
 }
-import { Seal, Spinner, fmtEth, shortAddr } from "./ui";
+import { ErrNote, Seal, Spinner, fmtEth, shortAddr } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
 import { Arise } from "./screens/Arise";
@@ -215,7 +353,7 @@ function IdentityCard({ status, onOpen }: { status: Status; onOpen: () => void }
 export default function App() {
   const [screen, setScreen] = useState<Screen>("upgrade");
   const [status, setStatus] = useState<Status | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [prefillRecipient, setPrefillRecipient] = useState<string | null>(null);
   const [verifyId, setVerifyId] = useState<string | null>(null);
   const [onboarded, setOnboarded] = useState(() => hasAccount());
@@ -238,7 +376,7 @@ export default function App() {
       });
       setError(null);
     } catch (e) {
-      setError(String(e));
+      setError(e);
     }
   }, []);
 
@@ -301,9 +439,13 @@ export default function App() {
 
   const nav = (key: Screen) => setScreen(key);
   const body = !status ? (
-    <div className="status-line">
-      {!error && <Spinner />} {error ? `guardian unreachable: ${error}` : "connecting to guardian…"}
-    </div>
+    error ? (
+      <ErrNote error={error} />
+    ) : (
+      <div className="status-line">
+        <Spinner /> connecting to guardian…
+      </div>
+    )
   ) : (
     <>
       {screen === "upgrade" && <Upgrade status={status} onDone={() => setScreen("send")} />}
@@ -380,6 +522,15 @@ export default function App() {
           onSwitched={switchRefresh}
           onAddAccount={() => setAddingAccount(true)}
           onOpenAccount={() => setScreen("upgrade")}
+          onRecover={(address) => {
+            // No passkey on this device matches. Switch to the account and run
+            // Arise to rotate in a fresh passkey.
+            setActiveAccount(address);
+            setStatus(null);
+            setScreen("arise");
+            setSwitcherOpen(false);
+            refresh();
+          }}
         />
       )}
 

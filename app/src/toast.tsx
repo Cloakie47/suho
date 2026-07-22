@@ -9,6 +9,7 @@ import {
 } from "react";
 import { EXPLORER } from "./config";
 import { Seal } from "./ui";
+import { humanError } from "./errors";
 
 /// Toast system per the suho-design skill: ONE toast per transaction that
 /// MUTATES through its lifecycle (pending -> preconfirmed -> final), never a
@@ -34,24 +35,6 @@ export interface TxToast {
   final(txHash: string): void;
   error(err: unknown): void;
   dismiss(): void;
-}
-
-// Typed revert names -> sentences in the interface's voice: what happened +
-// the next action. Never apologize; raw hex only behind the disclosure.
-// OtpRequired deliberately has no entry — the interstitial IS the response.
-const ERROR_SENTENCES: Record<string, string> = {
-  TransactionReverted: "The transaction reverted on-chain. Nothing moved.",
-  CodeInvalid: "That code didn't match. Check the verification window.",
-  CodeExpired: "Code expired. Request a fresh one.",
-  CodeAlreadyUsed: "That code was already used. Request a fresh one.",
-  CodeNotFound: "No active code for this action. Request a new one.",
-  InvalidPasskeySignature: "This passkey can't sign for the account.",
-};
-
-function humanize(err: unknown): { text: string; raw: string } {
-  const raw = err instanceof Error ? err.message : String(err);
-  const key = Object.keys(ERROR_SENTENCES).find((k) => raw.includes(k));
-  return { text: key ? ERROR_SENTENCES[key] : "That didn't go through. Try again.", raw };
 }
 
 interface ToastApi {
@@ -107,7 +90,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           timers.current.set(id, window.setTimeout(() => remove(id), 6000));
         },
         error: (err) => {
-          const { text, raw } = humanize(err);
+          const { text, raw } = humanError(err);
           setToasts((ts) =>
             ts.map((t) => (t.id === id ? { ...t, phase: "error", errorText: text, raw } : t)),
           );
@@ -183,12 +166,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 </button>
               )}
             </div>
-            <svg className="toast-curve" viewBox="0 0 220 16" fill="none" aria-hidden="true">
-              <path
-                className={`toast-curve-path${t.phase !== "pending" && t.phase !== "error" ? " done" : ""}${t.phase === "error" ? " err" : ""}`}
-                d="M0 14 C 30 14, 40 3, 55 3 C 70 3, 80 14, 110 14 C 140 14, 150 3, 165 3 C 180 3, 190 14, 220 14"
-              />
-            </svg>
           </div>
         ))}
       </div>

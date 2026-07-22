@@ -3,10 +3,11 @@ import { encodeAbiParameters, keccak256, parseEther, type Hex } from "viem";
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
-import { activeAccount, EXPLORER, storedCredential, storeCredential } from "../config";
+import { activeAccount, EXPLORER, GUARDIAN, storedCredential, storeCredential } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { recordSend } from "../stats";
+import { humanError } from "../errors";
 
 type Stage =
   | { k: "intro" }
@@ -51,10 +52,13 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   const createNew = async () => {
     setBusy("Waiting for Windows Hello. This is the new device's passkey…");
     try {
-      const key = await createPasskey("alice@suho (recovered)");
+      // Label the new passkey with the account's up.id so it is identifiable
+      // in the device credential manager (falls back to the address).
+      const label = status.upId ? `${status.upId}.up.id` : shortAddr(activeAccount());
+      const key = await createPasskey(label);
       setStage({ k: "created", key });
     } catch (e) {
-      setStage({ k: "error", message: String(e) });
+      setStage({ k: "error", message: humanError(e).text });
     } finally {
       setBusy(null);
     }
@@ -70,7 +74,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
       setCode("");
       setStage({ k: "code-sent", key, expiresAt: r.expiresAt });
     } catch (e) {
-      setStage({ k: "error", message: String(e) });
+      setStage({ k: "error", message: humanError(e).text });
     } finally {
       setBusy(null);
     }
@@ -189,7 +193,13 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
 
               {stage.k === "code-sent" && (
                 <>
-                  <p className="muted">Read the 6-digit code from the verification service terminal.</p>
+                  <p className="muted">
+                    Read the 6-digit code from the{" "}
+                    <a href={`${GUARDIAN}/issuer`} target="_blank" rel="noreferrer">
+                      verification service
+                    </a>
+                    .
+                  </p>
                   <input
                     type="text"
                     style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", letterSpacing: "0.5em", textAlign: "center" }}

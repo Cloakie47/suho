@@ -58,21 +58,24 @@ export function forgetAccount(address: string): void {
   localStorage.removeItem(credKey(address));
 }
 
-/** Per-account passkey credential ids (WebAuthn credential id, public). */
+/** Per-account passkey credential ids (WebAuthn credential id, public).
+ *  STRICTLY per-account. The old shared slot (suho.credentialId) is dead: it
+ *  was the InvalidPasskeySignature-after-switching bug. Every account stored
+ *  into it, so after a switch the signing prompt was pinned to whichever
+ *  credential was written LAST, by any account. No fallback, no guessing:
+ *  an unmapped account reads null and must be relinked (chain-verified). */
 const credKey = (a: string) => `suho.credential.${a.toLowerCase()}`;
 export function storedCredential(): string | null {
-  const own = localStorage.getItem(credKey(activeAccount()));
-  if (own) return own;
-  // legacy single-slot fallback, demo account only
-  return isLegacyDemo() ? localStorage.getItem(LS_CREDENTIAL) : null;
+  return credentialFor(activeAccount());
+}
+export function credentialFor(address: string): string | null {
+  return localStorage.getItem(credKey(address));
 }
 export function storeCredential(address: string, credentialId: string): void {
   localStorage.setItem(credKey(address), credentialId);
-  localStorage.setItem(LS_CREDENTIAL, credentialId); // legacy readers
 }
 export const EAS_ADDRESS = "0x4200000000000000000000000000000000000021" as const;
 // Suho Card schema (registered 2026-07-21, deployments/giwa-sepolia.json)
 export const CARD_SCHEMA_UID =
   "0x1eb6f3a6fefafeb323d44868d7c4c97ee64c981d9c47c5f028154a29dba0bdaa" as const;
 export const OTP_THRESHOLD_WEI = 10_000_000_000_000_000n; // 0.01 ether (guard immutable)
-export const LS_CREDENTIAL = "suho.credentialId";

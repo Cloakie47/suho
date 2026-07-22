@@ -17,13 +17,26 @@ export interface Status {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`${GUARDIAN}${path}`, init);
-  const body = await r.json();
+  let r: Response;
+  try {
+    r = await fetch(`${GUARDIAN}${path}`, init);
+  } catch (e) {
+    // Network-level failure (guardian down, CORS, offline). Preserve the raw
+    // text for the details disclosure; humanError maps "Failed to fetch".
+    throw new GuardianError("Failed to fetch", String(e));
+  }
+  const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new GuardianError(body.error ?? `HTTP ${r.status}`);
   return body as T;
 }
 
-export class GuardianError extends Error {}
+export class GuardianError extends Error {
+  raw?: string;
+  constructor(message: string, raw?: string) {
+    super(message);
+    this.raw = raw;
+  }
+}
 
 const post = (body: unknown): RequestInit => ({
   method: "POST",

@@ -37,6 +37,7 @@ import {
 import { resolveName, reverseName } from "./upid.js";
 import { encodeWebAuthnSig, spkiToXY, type BrowserAssertion } from "./webauthn.js";
 import { printCodeBanner } from "./banner.js";
+import { recordCode, activeCodes, issuerPageHtml } from "./issuer.js";
 import { getDirectory, prewarmDirectory } from "./directory.js";
 import { getCard } from "./card.js";
 
@@ -285,11 +286,21 @@ app.post("/otp/request", async (req, res) => {
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
     issuedCodes.set(domain, { expiresAt: Number(expiry) });
+    recordCode({ account, kind: "transfer", code, expiresAt: Number(expiry), recipient, valueWei: BigInt(value).toString() });
     printCodeBanner("TRANSFER", recipient, code);
     res.json({ ok: true, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
+});
+
+// ---- Verification Service portal (Phase T item 4) ----
+app.get("/issuer", (_req, res) => {
+  res.setHeader("content-type", "text/html; charset=utf-8");
+  res.send(issuerPageHtml());
+});
+app.get("/issuer/codes", (_req, res) => {
+  res.json({ codes: activeCodes() });
 });
 
 // ---- GET /directory[?q=...][&refresh=1] ----
@@ -506,9 +517,10 @@ app.post("/arise/request", async (req, res) => {
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
     issuedCodes.set(`${account}:${newPubKeyHash}`, { expiresAt: Number(expiry) });
+    recordCode({ account, kind: "recovery", code, expiresAt: Number(expiry) });
 
-    // Offchain delivery IS part of the show: this console plays the
-    // "Upbit Verification Service" on the projector.
+    // Offchain delivery: shown on the /issuer portal (and the console + codes.log
+    // as fallbacks). On mainnet this is the issuer's own app.
     printCodeBanner("RECOVERY", account, code);
     res.json({ ok: true, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
   } catch (e) {

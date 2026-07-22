@@ -1,3 +1,5 @@
+import { humanError } from "./errors";
+
 /** The dojang-style verified seal — the one flourish that must land. */
 export function Seal({ small, large }: { small?: boolean; large?: boolean }) {
   return (
@@ -7,23 +9,26 @@ export function Seal({ small, large }: { small?: boolean; large?: boolean }) {
   );
 }
 
-/** Roof-tile curve motif, used as a section divider. */
-export function TileDivider() {
-  return (
-    <svg className="tile-divider" width="220" height="16" viewBox="0 0 220 16" fill="none">
-      <path
-        d="M0 14 C 30 14, 40 3, 55 3 C 70 3, 80 14, 110 14 C 140 14, 150 3, 165 3 C 180 3, 190 14, 220 14"
-        stroke="#e4572e"
-        strokeWidth="2"
-        strokeLinecap="round"
-        opacity="0.7"
-      />
-    </svg>
-  );
-}
 
 export function Spinner() {
   return <span className="spinner" />;
+}
+
+/** Inline error: human sentence + a "details" disclosure holding the raw text.
+ *  Every surface that used to render String(e) uses this so nothing leaks. */
+export function ErrNote({ error, muted }: { error: unknown; muted?: boolean }) {
+  const { text, raw } = humanError(error);
+  return (
+    <div className={muted ? "muted" : "errbox"}>
+      {text}
+      {raw && raw !== text && (
+        <details className="err-details">
+          <summary>details</summary>
+          <div className="err-raw">{raw}</div>
+        </details>
+      )}
+    </div>
+  );
 }
 
 export const fmtEth = (wei: bigint | string, digits = 5): string => {

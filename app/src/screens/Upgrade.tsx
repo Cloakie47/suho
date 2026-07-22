@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { api, type Status } from "../api";
-import { createPasskey } from "../webauthn";
+import { createPasskey, relinkPasskey } from "../webauthn";
+import { accountPasskey } from "../chain";
+import { humanError } from "../errors";
 import { DEMO_ACCOUNT, EXPLORER, isLegacyDemo, storedCredential, storeCredential } from "../config";
 import { Seal, Spinner, shortAddr } from "../ui";
 
@@ -38,15 +40,19 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
   const [result, setResult] = useState<{ txHash: string; code: string } | null>(null);
   const hasCredential = !!storedCredential();
 
+  // Chain-verified relink. The old path took a credential id from the
+  // guardian, which went stale the moment Arise rotated the key; now the user
+  // picks the passkey and it is verified against the account's on-chain key.
   const linkExisting = async () => {
-    setBusy("Linking this device's passkey…");
+    setBusy("Pick this account's passkey…");
     setError(null);
     try {
-      const { credentialId } = await api.demoCredential();
+      const expected = await accountPasskey(DEMO_ACCOUNT);
+      const credentialId = await relinkPasskey(expected);
       storeCredential(DEMO_ACCOUNT, credentialId);
       onDone();
     } catch (e) {
-      setError(String(e));
+      setError(humanError(e).text);
     } finally {
       setBusy(null);
     }
@@ -56,13 +62,14 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
     setError(null);
     try {
       setBusy("Waiting for Windows Hello…");
-      const passkey = await createPasskey("alice@suho");
+      const label = status.upId ? `${status.upId}.up.id` : shortAddr(DEMO_ACCOUNT);
+      const passkey = await createPasskey(label);
       storeCredential(DEMO_ACCOUNT, passkey.credentialId);
       setBusy("Upgrading wallet on GIWA…");
       const res = await api.upgrade(DEMO_ACCOUNT, { x: passkey.x, y: passkey.y });
       setResult({ txHash: res.txHash, code: res.code });
     } catch (e) {
-      setError(String(e));
+      setError(humanError(e).text);
     } finally {
       setBusy(null);
     }
@@ -130,7 +137,7 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
           {error && <div className="errbox">{error}</div>}
         </div>
 
-        <div className="card" style={{ display: "grid", placeItems: "center", background: "rgba(18,17,16,0.4)" }}>
+        <div className="card" style={{ display: "grid", placeItems: "center" }}>
           <MiniCardPreview status={status} />
         </div>
       </div>

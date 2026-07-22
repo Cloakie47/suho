@@ -6,6 +6,7 @@ import { activeAccount } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { VCard, CardHistory } from "../vcard";
 import { useToast, type TxToast } from "../toast";
+import { humanError } from "../errors";
 
 // The lifecycle toast is the tx surface; inline phases cover the passkey
 // prompt and pre-relay errors only.
@@ -25,7 +26,7 @@ export function Card({ status }: { status: Status }) {
     try {
       setInfo(await api.card(activeAccount()));
     } catch (e) {
-      setPhase({ k: "error", message: String(e) });
+      setPhase({ k: "error", message: humanError(e).text });
     }
   };
   useEffect(() => {
@@ -58,7 +59,7 @@ export function Card({ status }: { status: Status }) {
         h.t.error(e);
         setPhase({ k: "idle" });
       } else {
-        setPhase({ k: "error", message: e instanceof GuardianError ? e.message : String(e) });
+        setPhase({ k: "error", message: humanError(e).text });
       }
     }
   };

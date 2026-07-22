@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { Check, Copy } from "lucide-react";
 import type { Hex } from "viem";
-import { api, GuardianError, type Status } from "../api";
+import { api, type Status } from "../api";
 import { executeWithPasskey } from "../execute";
-import { activeAccount } from "../config";
+import { activeAccount, GUARDIAN } from "../config";
 import { Seal, Spinner, fmtEth } from "../ui";
 import { useToast, type TxToast } from "../toast";
 
@@ -19,7 +19,6 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
   const [copied, setCopied] = useState(false);
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [noteDismissed, setNoteDismissed] = useState(
     () => localStorage.getItem(LS_RECOVERY_NOTE) === "1",
   );
@@ -69,7 +68,6 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
     fetchCalls: () => Promise<{ calls: { target: Hex; value: string; data: Hex }[] }>,
   ) => {
     setBusy(kind);
-    setError(null);
     const h: { t: TxToast | null } = { t: null };
     try {
       const { calls } = await fetchCalls();
@@ -87,8 +85,10 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
       );
       refresh();
     } catch (e) {
-      if (h.t) h.t.error(e);
-      else setError(e instanceof GuardianError ? e.message : String(e));
+      // Every flow error goes through the toast's human-sentence mapping. A
+      // fetch-phase failure (AlreadyVerified, NameTaken...) fires before the
+      // `sent` hook, so open a carrier toast for it.
+      (h.t ?? toast.begin(pendingLabel)).error(e);
     } finally {
       setBusy(null);
     }
@@ -209,7 +209,6 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
           </div>
         </div>
       </div>
-      {error && <div className="errbox">{error}</div>}
     </div>
   );
 }

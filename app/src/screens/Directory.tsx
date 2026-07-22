@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { api, type DirEntry } from "../api";
 import { activeAccount } from "../config";
-import { Seal, Spinner, shortAddr } from "../ui";
+import { ErrNote, Seal, Spinner, shortAddr } from "../ui";
 
 /// D2 under the R5 composition pass: table-like rows, sticky search, count
 /// header. Trust surface unchanged — only active, Dojang-gated names render.
@@ -10,7 +10,7 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
   const [total, setTotal] = useState(0);
   const [shown, setShown] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const debounceRef = useRef<number>();
@@ -24,7 +24,7 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
       setShown(r.shown);
       setError(null);
     } catch (e) {
-      setError(String(e));
+      setError(e);
     } finally {
       setBusy(false);
     }
@@ -69,7 +69,7 @@ export function Directory({ onSendTo }: { onSendTo: (recipient: string) => void 
           <Spinner /> loading the registry…
         </div>
       )}
-      {error && <div className="errbox">{error}</div>}
+      {error != null && <ErrNote error={error} />}
 
       {entries && (
         <div className="card dir-table">

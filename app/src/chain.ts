@@ -11,7 +11,40 @@ import { CHAIN_ID, FLASH_RPC, NORMAL_RPC } from "./config";
 export const flashClient = createPublicClient({ transport: http(FLASH_RPC) });
 export const normalClient = createPublicClient({ transport: http(NORMAL_RPC) });
 
-const accountAbi = parseAbi(["function nonce() view returns (uint256)"]);
+const accountAbi = parseAbi([
+  "function nonce() view returns (uint256)",
+  "function passkey() view returns (bytes32 x, bytes32 y)",
+]);
+
+/** The account's on-chain P-256 passkey. Ground truth for relinking. */
+export async function accountPasskey(account: Hex): Promise<{ x: Hex; y: Hex }> {
+  const [x, y] = await flashClient.readContract({
+    address: account,
+    abi: accountAbi,
+    functionName: "passkey",
+  });
+  return { x, y };
+}
+
+// Our OndolAccount implementations (v1 superseded, v2 current). A 7702 account
+// delegated to either is one of ours; the designator is 0xef0100 + impl addr.
+const ONDOL_IMPLS = [
+  "0xc512b2b083a38aa75f20e947fec5ee22aa23bd69", // v2 current
+  "0xd9933befc6c6ff968c662c30c765ce9740ad8ec4", // v1 superseded
+];
+
+/** True if `address` is a live Ondol smart account on chain (Add existing
+ *  account validation). Reads code twice: the public RPC can serve stale empty
+ *  code right after activity, and a false negative here would wrongly reject a
+ *  real account. */
+export async function isOndolAccount(address: Hex): Promise<boolean> {
+  const check = async () => {
+    const code = (await normalClient.getCode({ address }))?.toLowerCase() ?? "0x";
+    if (!code.startsWith("0xef0100")) return false;
+    return ONDOL_IMPLS.includes("0x" + code.slice(8));
+  };
+  return (await check()) || (await check());
+}
 
 export interface Call {
   target: Hex;

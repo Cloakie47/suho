@@ -8,14 +8,16 @@ feature fires on that same account.
 
 **Windows open (only these two visible):**
 1. Browser in a **fresh profile** (no Suho state) at `http://localhost:5173`,
-   ~1440px wide. What the viewer sees all demo: the hanji-light theme — warm
+   ~1440px wide. What the viewer sees all demo: the hanji-light theme. Warm
    paper ground, white hairline cards, ink text, one red accent. Red appears
    only on seals, primary buttons, and active nav.
-2. The guardian console, retitled **"UPBIT VERIFICATION SERVICE"** — code
-   delivery theater. Its dark terminal reads as deliberate contrast against
-   the paper-light app on camera. (Recovery if lost:
-   `Get-Content -Wait guardian\codes.log`.)
-Hidden but running: vite terminal.
+2. A second browser tab at the **Verification Service**,
+   `http://localhost:8787/issuer`. Same hanji theme as the app, titled
+   "Verification Service (testnet issuer, simulated)". Codes appear here live
+   with a countdown the moment they are issued. The app links to it from the
+   OTP and Arise screens, so you can open it on cue. (Fallback if the page is
+   flaky: `Get-Content -Wait guardian\codes.log`.)
+Hidden but running: the guardian and vite terminals.
 
 **Explorer tabs pre-opened (sepolia-explorer.giwa.io):**
 - T1: blank tab ready for the new account's address page (you'll paste it —
@@ -24,6 +26,20 @@ Hidden but running: vite terminal.
   view** — this is where the actual ETH movement of a passkey send is visible
   (e.g. the OTP send `0x3c3f…4b03`).
 - T3: the arise() tx `0x3677…6bc3`.
+
+**Services health check (do this FIRST, catch a dead service before the take):**
+Both services must be up. The app depends on the guardian for every read and
+relay; a dead guardian shows as "Can't reach the guardian service" in the app.
+- **App loads:** open `http://localhost:5173` — you land on onboarding (fresh
+  profile) or the Send dashboard. If it shows the guardian-unreachable card,
+  the guardian is down.
+- **Verification service loads:** open `http://localhost:8787/issuer` — the
+  "Verification Service (testnet issuer, simulated)" page renders. This also
+  confirms the guardian is serving.
+- One-line check from a terminal (both should print `200`):
+  `curl -s -o /dev/null -w "app %{http_code}\n" http://localhost:5173/ ; curl -s -o /dev/null -w "issuer %{http_code}\n" http://localhost:8787/issuer`
+- If either is down: start it (guardian: `cd guardian && npm run dev`; app:
+  `cd app && npm run dev`) and re-check before recording.
 
 **Balances pre-flight:**
 - Relayer (deployer key) ≥ 0.001 ETH — it pays gas for EVERYTHING in this demo.
@@ -84,23 +100,25 @@ amounts warn, not block.
 
 Same recipient, amount **0.011** → Send → a **white modal over the dimmed
 paper ground**: six code boxes and a jade countdown ring that turns red near
-expiry. Turn to the VERIFICATION SERVICE window — the 6-digit code is on
-screen. Type it into the six boxes → Verify & send → success toast.
-*"The code is bound to THIS recipient and THIS amount, single-use, delivered
-out-of-band. A drainer in the browser can't produce it."*
+expiry. The modal links to the **verification service**; switch to that tab
+(a code card slides in with its own countdown) and read the 6-digit code. Type
+it into the six boxes → Verify & send → success toast. *"The code is bound to
+THIS recipient and THIS amount, single-use, delivered out-of-band. A drainer in
+the browser can't produce it."*
 
-**Fallbacks:** code expired (10 min) → send again for a fresh one; window
-lost → `codes.log`; wrong digit → toast says "That code didn't match" — retype.
+**Fallbacks:** code expired (10 min) → send again for a fresh one; page flaky
+→ `codes.log`; wrong digit → toast says "That code didn't match" then retype.
 
 ## Act 5 — Arise (2:20–3:00)
 
 *"The phone is gone. Watch what does NOT happen: no seed phrase, no support
 ticket, no new address."* Arise screen: numbered step rail on the left (active
-step ringed in red), white cards on the right. Create new passkey (Hello —
-"the new phone") → request code → read it off the service window → **Arise** →
-toast: "You have risen · X.Xs". Prove-it: two side-by-side white cards, red ✗
-old passkey (toast: *"This passkey can't sign for the account"*), jade ✓ new
-passkey (0.0001 send lands). Point at tab T3.
+step ringed in red), white cards on the right. Create new passkey (Hello,
+"the new phone") → request code → switch to the **verification service** tab
+and read the recovery code → **Arise** → toast: "You have risen · X.Xs".
+Prove-it: two side-by-side white cards, red ✗ old passkey (toast: *"This
+passkey can't sign for the account"*), jade ✓ new passkey (0.0001 send lands).
+Point at tab T3.
 
 **Fallback:** if the old-key test is skipped for time, the ✗ card copy still
 tells the story — don't force it.

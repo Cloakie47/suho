@@ -234,7 +234,6 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 .seal.small { min-width: 26px; height: 26px; font-size: 0.75rem; border-width: 2px; }
 .seal.large { min-width: 52px; height: 52px; font-size: 1.35rem; border-width: 3px; border-radius: 10px; }
 
-.tile-divider { display: block; margin: 4px auto 20px; opacity: 0.8; }
 
 /* ================= send dashboard (R2) ================= */
 .composer-row { display: grid; grid-template-columns: 1fr 170px auto; gap: 12px; align-items: start; }
@@ -289,10 +288,10 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 .act-row:hover .act-link { opacity: 1; }
 .skeleton {
   height: 14px; border-radius: 6px;
-  background: linear-gradient(90deg, rgba(27,25,23,.05) 25%, rgba(27,25,23,.1) 50%, rgba(27,25,23,.05) 75%);
-  background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
+  background: rgba(28, 25, 23, 0.08);
+  animation: pulse 1.4s ease-in-out infinite;
 }
-@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes pulse { 50% { opacity: 0.4; } }
 
 /* ================= status / feedback ================= */
 .warnbox { color: var(--warn); font-size: 0.86rem; margin-top: 8px; line-height: 1.4; }
@@ -489,19 +488,6 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
   60% { transform: scale(0.97) rotate(-5deg); opacity: 1; }
   100% { transform: scale(1); }
 }
-.toast-curve { display: block; width: 100%; height: 10px; margin-top: 6px; }
-.toast-curve-path {
-  stroke: var(--ink-dim); stroke-width: 2; stroke-linecap: round; fill: none;
-  stroke-dasharray: 60 200; opacity: 0.45;
-  animation: curve-shimmer 1.4s linear infinite;
-}
-@keyframes curve-shimmer { from { stroke-dashoffset: 260; } to { stroke-dashoffset: 0; } }
-.toast-curve-path.done {
-  stroke: var(--jade); stroke-dasharray: 260 260; stroke-dashoffset: 0; opacity: 0.9;
-  animation: curve-complete 300ms var(--ease);
-}
-@keyframes curve-complete { from { stroke-dashoffset: 260; } }
-.toast-curve-path.err { stroke: var(--danger); stroke-dasharray: 260 260; stroke-dashoffset: 0; opacity: 0.55; animation: none; }
 
 /* countdown */
 .countdown { text-align: center; color: var(--ink-dim); margin-top: 8px; font-size: 0.8rem; }
@@ -510,8 +496,7 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: toast-fade 200ms ease; }
   .toast-seal { animation: toast-fade 200ms ease; }
-  .toast-curve-path, .toast-curve-path.done { animation: none; }
-  .card.hover:hover, .stat-card:hover { transform: none; }
+    .card.hover:hover, .stat-card:hover { transform: none; }
   .vcard { transition: none; }
   .skeleton { animation: none; }
 }
@@ -542,3 +527,27 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
   cursor: pointer; padding: 4px 6px; border-radius: 6px;
 }
 .switch-x:hover { color: var(--danger); }
+
+/* plain hairline divider (tile curve retired) */
+.hairline { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+
+.cred-line { display: block; font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-dim); font-weight: 400; margin-top: 1px; }
+.switch-link {
+  border: 1px solid var(--seal); background: none; color: var(--seal-deep);
+  border-radius: 8px; padding: 4px 12px; cursor: pointer; font-size: 0.8rem; flex: none;
+}
+.switch-link:disabled { border-color: var(--line-strong); color: var(--ink-dim); }
+
+/* add-existing / relink fallback (Phase T) */
+.add-existing { display: grid; gap: 8px; }
+.cred-hint { font-size: 0.72rem; color: var(--ink-dim); padding: 0 8px 8px; }
+.link-fallback {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 4px 8px 10px; flex-wrap: wrap;
+}
+.link-fallback .errbox { font-size: 0.8rem; flex: 1; }
+
+/* inline error details disclosure (Phase T item 2) */
+.err-details { margin-top: 4px; font-size: 0.78rem; color: var(--ink-dim); }
+.err-details summary { cursor: pointer; }
+.err-raw { font-family: var(--font-mono); font-size: 0.72rem; word-break: break-all; margin-top: 4px; color: var(--ink-dim); }

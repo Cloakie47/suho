@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type CardInfo, type Status } from "../api";
-import { Seal, Spinner, TileDivider, shortAddr } from "../ui";
+import { ErrNote, Seal, Spinner, shortAddr } from "../ui";
 import { VCard, CardHistory } from "../vcard";
 
 /// C5: read-only verify view — #/verify/<address-or-uid>. Resolves everything
@@ -9,7 +9,7 @@ import { VCard, CardHistory } from "../vcard";
 export function Verify({ id }: { id: string }) {
   const [card, setCard] = useState<CardInfo | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     (async () => {
@@ -20,12 +20,12 @@ export function Verify({ id }: { id: string }) {
         else if (/^0x[0-9a-fA-F]{40}$/.test(id)) setStatus(await api.status(id));
         else setError("Unknown address or attestation uid.");
       } catch (e) {
-        setError(String(e));
+        setError(e);
       }
     })();
   }, [id]);
 
-  if (error) return <div className="errbox">{error}</div>;
+  if (error != null) return <ErrNote error={error} />;
   if (!card || (!status && card.address)) {
     return (
       <div className="status-line">
@@ -61,7 +61,7 @@ export function Verify({ id }: { id: string }) {
         )}
       </div>
 
-      <TileDivider />
+      <hr className="hairline" />
 
       {card.current && status ? (
         <>
