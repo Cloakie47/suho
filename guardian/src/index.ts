@@ -26,6 +26,8 @@ import {
   DELEGATION_PREFIX,
   ERC1967_IMPL_SLOT,
   ondolProxyImpl,
+  GAS_ORACLE,
+  gasOracleAbi,
   dojangScrollAbi,
   suhoCodeAttesterAbi,
   ariseModuleAbi,
@@ -119,6 +121,59 @@ async function verifiedBy(address: Hex): Promise<string | null> {
   }
   return null;
 }
+
+/// Decode a viem contract revert into its typed error name (OtpRequired,
+/// CodeInvalid, CannotCoverGas, ...). Undefined for non-revert failures.
+function revertName(e: unknown): string | undefined {
+  const reverted =
+    e instanceof BaseError
+      ? (e.walk((err) => err instanceof ContractFunctionRevertedError) as
+          | ContractFunctionRevertedError
+          | undefined)
+      : undefined;
+  return reverted?.data?.errorName;
+}
+
+// G3: recommended maxGasPayment = (representative execute gas * gas price + L1
+// upper bound) * 1.25. Same oracle and tx-size V3 uses, so the number the app
+// shows and the passkey signs matches what the contract will charge.
+const REPRESENTATIVE_EXECUTE_GAS = 350_000n; // a typical guarded send (Phase G0)
+const L1_TX_SIZE = 1200n; // matches OndolAccountV3.L1_SIZE_ESTIMATE
+const FEE_MARGIN_BPS = 12_500n; // +25%
+const L1_ALLOWANCE_FALLBACK = 70_000_000_000n; // matches V3.L1_ALLOWANCE
+
+async function recommendedFee(): Promise<{ maxGasPayment: bigint; gasPrice: bigint; l1: bigint }> {
+  const [gasPrice, l1] = await Promise.all([
+    publicClient.getGasPrice(),
+    publicClient
+      .readContract({
+        address: GAS_ORACLE,
+        abi: gasOracleAbi,
+        functionName: "getL1FeeUpperBound",
+        args: [L1_TX_SIZE],
+      })
+      .catch(() => L1_ALLOWANCE_FALLBACK),
+  ]);
+  const raw = REPRESENTATIVE_EXECUTE_GAS * gasPrice + l1;
+  return { maxGasPayment: (raw * FEE_MARGIN_BPS) / 10_000n, gasPrice, l1 };
+}
+
+// ---- GET /fee ----
+// The recommended maxGasPayment the app shows before the passkey prompt and the
+// passkey signs into V3.execute. Informational until V3 accounts exist.
+app.get("/fee", async (_req, res) => {
+  try {
+    const { maxGasPayment, gasPrice, l1 } = await recommendedFee();
+    res.json({
+      maxGasPayment: maxGasPayment.toString(),
+      gasPrice: gasPrice.toString(),
+      l1UpperBound: l1.toString(),
+      eth: (Number(maxGasPayment) / 1e18).toFixed(9),
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
 
 // ---- GET /status?address=0x... ----
 app.get("/status", async (req, res) => {
@@ -286,27 +341,40 @@ app.post("/relay", async (req, res) => {
       webauthn: BrowserAssertion;
     };
     const sig = encodeWebAuthnSig(webauthn); // DER -> (r,s) -> low-s, one place
+    const encodedCalls = calls.map((c) => ({
+      target: c.target,
+      value: BigInt(c.value),
+      data: c.data ?? "0x",
+    }));
+    const execArgs = [encodedCalls, otpCode ?? "", sig] as const;
+
+    // G3 preflight: eth_call the exact tx first. On revert, refuse with the
+    // typed error and spend no gas — the doomed tx is never submitted.
+    try {
+      await publicClient.simulateContract({
+        account: relayerAccount.address,
+        address: account,
+        abi: ondolAccountAbi,
+        functionName: "execute",
+        args: execArgs,
+      });
+    } catch (e) {
+      const name = revertName(e);
+      if (name) return res.status(400).json({ error: name });
+      throw e; // non-revert (RPC/network): fall through to the 500 below
+    }
+
     const txHash = await relayerWallet.writeContract({
       address: account,
       abi: ondolAccountAbi,
       functionName: "execute",
-      args: [
-        calls.map((c) => ({ target: c.target, value: BigInt(c.value), data: c.data ?? "0x" })),
-        otpCode ?? "",
-        sig,
-      ],
+      args: execArgs,
     });
     res.json({ txHash, explorer: explorerTx(txHash) }); // client watches Flashblocks
   } catch (e) {
     // Surface the contract's typed error name (OtpRequired, CodeInvalid, ...)
     // so the app can branch — e.g. open the OTP interstitial.
-    const reverted =
-      e instanceof BaseError
-        ? (e.walk((err) => err instanceof ContractFunctionRevertedError) as
-            | ContractFunctionRevertedError
-            | undefined)
-        : undefined;
-    const name = reverted?.data?.errorName;
+    const name = revertName(e);
     if (name) return res.status(400).json({ error: name });
     res.status(500).json({ error: String(e) });
   }

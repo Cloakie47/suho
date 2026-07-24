@@ -119,5 +119,12 @@ export const ondolAccountV3Impl = (deployments.ondolAccountV3Impl ?? null) as `0
 // write it, so a non-zero value is the upgradeable signal.
 export const ERC1967_IMPL_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc" as `0x${string}`;
+
+// OP-Stack GasPriceOracle predeploy — the same getL1FeeUpperBound V3 uses, so
+// the recommended fee the app signs matches what the contract will charge.
+export const GAS_ORACLE = "0x420000000000000000000000000000000000000F" as `0x${string}`;
+export const gasOracleAbi = parseAbi([
+  "function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)",
+]);
 export const explorerTx = (hash: string) => `https://sepolia-explorer.giwa.io/tx/${hash}`;
 export const explorerAddr = (a: string) => `https://sepolia-explorer.giwa.io/address/${a}`;
