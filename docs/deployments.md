@@ -10,7 +10,9 @@ and executed without incident. Deployer/issuer key: `DEPLOYER_*` in `.env`
 | OndolTransferGuard | `0x106953DB14B1183378976E128AE5cd40C4b493d2` | [view](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) | ✅ 2026-07-21 (Blockscout, Pass) |
 | AriseModule | `0x827375200CF4595f71b09497A65BAF10Ca907466` | [view](https://sepolia-explorer.giwa.io/address/0x827375200CF4595f71b09497A65BAF10Ca907466) | ✅ 2026-07-21 (Blockscout, Pass) |
 | OndolAccount (impl, v1 — superseded) | `0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4` | [view](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolAccountV2 (impl — current) | `0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69` | [view](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) | ✅ 2026-07-21 (Blockscout, Pass) |
+| OndolAccountV2 (impl — superseded, still supported for pinned accounts) | `0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69` | [view](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) | ✅ 2026-07-21 (Blockscout, Pass) |
+| OndolProxy (upgradeable 7702 target — current) | `0x5641D0D42bCD6450BE30077998Fe64F263A4887B` | [view](https://sepolia-explorer.giwa.io/address/0x5641D0D42bCD6450BE30077998Fe64F263A4887B) | ✅ 2026-07-24 (Blockscout, Pass) |
+| OndolAccountV3 (impl — current) | `0xff164E70038EB91c342981d95f1f59d04499399E` | [view](https://sepolia-explorer.giwa.io/address/0xff164E70038EB91c342981d95f1f59d04499399E) | ✅ 2026-07-24 (Blockscout, Pass) |
 
 Suho code schema UID (registered on the SchemaRegistry predeploy, resolver 0,
 revocable): `0x8f05c451eccf1fe63ba0518ad1f3338b92b7516eec60ea8ea9e528b20e49a3cf`
@@ -33,5 +35,17 @@ Phase O (2026-07-21): OndolAccountV2 replaces the self-call-gated initialize
 with EIP-712 signature-gated `initializeWithSig` (low-s enforced) so a relayer
 can initialize a gasless fresh account; storage namespace is identical to v1,
 so v1-initialized accounts re-delegate to v2 with no re-initialization. v1
-remains deployed and source-verified as superseded. New onboarding always
-delegates to v2.
+remains deployed and source-verified as superseded.
+
+Phase G (2026-07-24): OndolProxy and OndolAccountV3 deployed (deploy txs
+[`0x9aa7532d…`](https://sepolia-explorer.giwa.io/tx/0x9aa7532d8d591d5df0e161b8dd8c0bd06417cbf84efe282a6fe52e97b4d60c04)
+and
+[`0x4bb11d91…`](https://sepolia-explorer.giwa.io/tx/0x4bb11d919d9b19f1aaabc85958982edb8ce8541f4da746ee77ea04581b4912e7)),
+both source-verified. New accounts delegate to **OndolProxy** and initialize
+with **V3** behind it, so the passkey can later `upgradeTo` a new implementation.
+V3 adds capped, passkey-signed gas reimbursement (`maxGasPayment`) and shares the
+V1/V2 ERC-7201 storage layout. **V2 is superseded but still supported**: accounts
+delegated straight to V2 (including gasless-onboarded accounts whose bootstrap key
+was destroyed) keep working, but they are pinned and cannot upgrade. Accounts with
+a live EOA key (alice) can re-delegate to the proxy. See the migration reality in
+[The Ondol account](/internals/ondol-account).
