@@ -110,6 +110,12 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
                   0xef0100… (view on explorer)
                 </a>
               </p>
+              {status.upgradeable === false && !isLegacyDemo() && (
+                <div className="pinned-note">
+                  This account was created before upgradeable accounts. It works, but it cannot
+                  receive future upgrades. Move funds to a new account when convenient.
+                </div>
+              )}
               {!hasCredential && !result && isLegacyDemo() && (
                 <button className="primary wide" onClick={linkExisting} disabled={!!busy}>
                   {busy ?? "Use this device's passkey"}

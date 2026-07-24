@@ -10,6 +10,12 @@ export interface Status {
   balance: string;
   isOndolAccount: boolean;
   delegatedTo: Hex | null;
+  /** "proxy" = upgradeable (Phase G onward); "v2"/"v1" = legacy, pinned. */
+  delegationShape?: "proxy" | "v2" | "v1" | "unknown" | "none";
+  /** Active implementation behind the proxy, or the designator for a legacy account. */
+  implementation?: Hex | null;
+  /** True only for proxy-fronted accounts; legacy accounts cannot upgrade. */
+  upgradeable?: boolean;
   initialized: boolean;
   accountNonce: string;
   demoReady?: boolean;

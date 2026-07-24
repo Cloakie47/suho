@@ -24,6 +24,8 @@ import {
   ADDR,
   ATTESTER_IDS,
   DELEGATION_PREFIX,
+  ERC1967_IMPL_SLOT,
+  ondolProxyImpl,
   dojangScrollAbi,
   suhoCodeAttesterAbi,
   ariseModuleAbi,
@@ -122,20 +124,52 @@ async function verifiedBy(address: Hex): Promise<string | null> {
 app.get("/status", async (req, res) => {
   try {
     const address = String(req.query.address) as Hex;
-    const [attester, upId, balance, code] = await Promise.all([
+    const [attester, upId, balance, code, implSlot] = await Promise.all([
       verifiedBy(address),
       reverseName(address),
       flashClient.getBalance({ address }), // Flashblocks-fresh
       publicClient.getCode({ address }),
+      publicClient.getStorageAt({ address, slot: ERC1967_IMPL_SLOT }),
     ]);
-    // v1 and v2 are both our implementations (v2 = current, v1 = superseded).
-    const ours = [ADDR.ondolAccountV2Impl, ADDR.ondolAccountImpl].map(
-      (impl) => (DELEGATION_PREFIX + impl.slice(2)).toLowerCase(),
-    );
-    const isOndol = !!code && ours.includes(code.toLowerCase());
+
+    // The 7702 designator target: proxy (new) or a V1/V2 impl (legacy).
+    const designator =
+      code && code.startsWith(DELEGATION_PREFIX) ? (`0x${code.slice(8)}` as Hex) : null;
+    // A proxy-fronted account has the ERC-1967 slot set (in its own storage);
+    // legacy V1/V2 accounts never write it. Non-zero => upgradeable, and the
+    // low 20 bytes are the active implementation behind the proxy.
+    const activeFromSlot =
+      implSlot && BigInt(implSlot) !== 0n ? (`0x${implSlot.slice(-40)}` as Hex) : null;
+
+    // Classify the delegation shape. Explicit address match when the proxy is
+    // deployed (config); otherwise the ERC-1967 slot is the structural signal.
+    let delegationShape: "proxy" | "v2" | "v1" | "unknown" | "none" = "none";
+    let upgradeable = false;
+    if (designator) {
+      const d = designator.toLowerCase();
+      if (ondolProxyImpl && d === ondolProxyImpl.toLowerCase()) {
+        delegationShape = "proxy";
+        upgradeable = true;
+      } else if (d === ADDR.ondolAccountV2Impl.toLowerCase()) {
+        delegationShape = "v2";
+      } else if (d === ADDR.ondolAccountImpl.toLowerCase()) {
+        delegationShape = "v1";
+      } else if (activeFromSlot) {
+        delegationShape = "proxy"; // proxy address not yet configured
+        upgradeable = true;
+      } else {
+        delegationShape = "unknown";
+      }
+    }
+
+    const isOndol = delegationShape === "proxy" || delegationShape === "v2" || delegationShape === "v1";
+    // A proxy account with an empty slot is delegated but not yet initialized;
+    // reading through it would delegatecall address(0). Only read when there is
+    // an implementation to dispatch to.
+    const readable = isOndol && (delegationShape !== "proxy" || activeFromSlot !== null);
     let initialized = false;
     let accountNonce = "0";
-    if (isOndol) {
+    if (readable) {
       initialized = await publicClient.readContract({
         address, abi: ondolAccountAbi, functionName: "initialized",
       });
@@ -150,7 +184,12 @@ app.get("/status", async (req, res) => {
       upId,
       balance: balance.toString(),
       isOndolAccount: isOndol,
-      delegatedTo: code && code.startsWith(DELEGATION_PREFIX) ? `0x${code.slice(8)}` : null,
+      delegatedTo: designator,
+      delegationShape,
+      // The active implementation: behind the proxy if upgradeable, else the
+      // designator target for a legacy account.
+      implementation: activeFromSlot ?? designator,
+      upgradeable,
       initialized,
       accountNonce,
       demoReady: demoRequiredWei > 0n ? balance >= demoRequiredWei : true,

@@ -107,5 +107,17 @@ export const faucetExtensionAbi = parseAbi([
 export const registerAbi = parseAbi(["function register(string name)"]);
 
 export const DELEGATION_PREFIX = "0xef0100";
+
+// Phase G upgradeable stack. The proxy and V3 impl land in the deployments file
+// only after the G deploy; until then these are null and proxy-fronting is
+// detected structurally from the ERC-1967 slot below.
+export const ondolProxyImpl = (deployments.ondolProxy ?? null) as `0x${string}` | null;
+export const ondolAccountV3Impl = (deployments.ondolAccountV3Impl ?? null) as `0x${string}` | null;
+
+// ERC-1967 implementation slot: keccak256("eip1967.proxy.implementation") - 1.
+// A proxy-fronted account has this set in its own storage; legacy V1/V2 never
+// write it, so a non-zero value is the upgradeable signal.
+export const ERC1967_IMPL_SLOT =
+  "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc" as `0x${string}`;
 export const explorerTx = (hash: string) => `https://sepolia-explorer.giwa.io/tx/${hash}`;
 export const explorerAddr = (a: string) => `https://sepolia-explorer.giwa.io/address/${a}`;

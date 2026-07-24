@@ -427,6 +427,11 @@ function IdentityCard({ status, onOpen }: { status: Status; onOpen: () => void }
         ) : (
           <span className="chip-ok">Demo ready</span>
         ))}
+      {!isLegacyDemo() && status.isOndolAccount && status.initialized && status.upgradeable === false && (
+        <span className="chip-warn" title="Created before upgradeable accounts. Open the account for details.">
+          Not upgradeable
+        </span>
+      )}
     </div>
   );
 }

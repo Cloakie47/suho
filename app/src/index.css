@@ -585,6 +585,14 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 .io-link:hover { color: var(--seal-deep); border-color: var(--seal); }
 .switch-io-note { margin: 8px 6px 0; font-size: 0.72rem; color: var(--ink-dim); }
 
+/* pinned (pre-upgradeable) account note */
+.pinned-note {
+  margin-top: 14px; padding: 11px 13px;
+  background: var(--warn-bg); color: var(--warn-ink);
+  border: 1px solid rgba(138, 90, 27, 0.3); border-radius: 10px;
+  font-size: 0.82rem; line-height: 1.45; text-align: left;
+}
+
 /* onboarding: save-this-address gate */
 .save-address {
   margin: 16px 0 4px; padding: 16px; text-align: left;
