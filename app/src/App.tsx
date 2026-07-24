@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   SendHorizontal,
   BookUser,
@@ -6,6 +6,8 @@ import {
   KeyRound,
   Check,
   Copy,
+  Download,
+  Upload,
   type LucideIcon,
 } from "lucide-react";
 import { api, type Status } from "./api";
@@ -21,6 +23,7 @@ import {
   storeCredential,
   DEMO_ACCOUNT,
   DOCS_URL,
+  GITHUB_URL,
 } from "./config";
 import { accountPasskey, isOndolAccount } from "./chain";
 import { relinkPasskey } from "./webauthn";
@@ -58,6 +61,8 @@ function AccountSwitcher({
   const [addr, setAddr] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addErr, setAddErr] = useState<string | null>(null);
+  const [ioMsg, setIoMsg] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
   const current = activeAccount().toLowerCase();
   const hasDemo = knownAccounts().some((a) => a.toLowerCase() === DEMO_ACCOUNT.toLowerCase());
 
@@ -144,7 +149,7 @@ function AccountSwitcher({
 
   const remove = (address: string) => {
     const ok = window.confirm(
-      "Forget this account on this device? The account itself lives on chain. Your passkey stays in this device's credential manager.",
+      "Forget this account on this device? The account itself lives on chain. Your passkey stays in this device's credential manager. Save the address first if you want it back.",
     );
     if (!ok) return;
     forgetAccount(address);
@@ -154,6 +159,56 @@ function AccountSwitcher({
       onSwitched();
     }
     load();
+  };
+
+  /** Export the account LIST — addresses and up.id names only. No key material
+   *  exists to export: passkeys never leave the device credential manager and no
+   *  private key is ever stored. This file is a recovery aid, not a secret. */
+  const exportAccounts = () => {
+    const accounts = (rows ?? knownAccounts().map((address) => ({ address, upId: null }))).map(
+      (r) => ({ address: r.address, name: r.upId ? `${r.upId}.up.id` : null }),
+    );
+    const blob = new Blob(
+      [JSON.stringify({ suho: "accounts", version: 1, note: "addresses only, no keys", accounts }, null, 2)],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "suho-accounts.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    setIoMsg(`Exported ${accounts.length} account${accounts.length === 1 ? "" : "s"}.`);
+  };
+
+  /** Import restores the LIST only. Each imported row lands with no credential,
+   *  so the row still shows Link and requires the chain-verified relink before it
+   *  can sign. Importing never grants signing authority. */
+  const importAccounts = async (file: File) => {
+    setIoMsg(null);
+    try {
+      const parsed = JSON.parse(await file.text());
+      const list: unknown[] = Array.isArray(parsed) ? parsed : parsed?.accounts;
+      if (!Array.isArray(list)) throw new Error("shape");
+      let added = 0;
+      for (const item of list) {
+        const a = typeof item === "string" ? item : (item as { address?: unknown })?.address;
+        if (typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a)) {
+          if (!knownAccounts().some((k) => k.toLowerCase() === a.toLowerCase())) {
+            rememberAccount(a);
+            added++;
+          }
+        }
+      }
+      await load();
+      setIoMsg(
+        added === 0
+          ? "No new accounts to add. Each still needs Link to sign."
+          : `Added ${added} account${added === 1 ? "" : "s"}. Use Link on each to attach its passkey.`,
+      );
+    } catch {
+      setIoMsg("Couldn't read that accounts file.");
+    }
   };
 
   return (
@@ -278,6 +333,30 @@ function AccountSwitcher({
             </>
           )}
         </div>
+
+        <div className="switch-io">
+          <button className="io-link" onClick={exportAccounts}>
+            <Download size={13} strokeWidth={1.5} /> Export accounts
+          </button>
+          <button className="io-link" onClick={() => importRef.current?.click()}>
+            <Upload size={13} strokeWidth={1.5} /> Import accounts
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importAccounts(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <p className="switch-io-note">
+          Addresses and names only. No key material is exported. Imported accounts still need Link.
+        </p>
+        {ioMsg && <div className="okbox" style={{ marginTop: 4 }}>{ioMsg}</div>}
       </div>
     </div>
   );
@@ -489,6 +568,9 @@ export default function App() {
         <div className="side-foot">
           <a className="side-link" href={DOCS_URL} target="_blank" rel="noreferrer">
             Docs
+          </a>
+          <a className="side-link" href={GITHUB_URL} target="_blank" rel="noreferrer">
+            GitHub
           </a>
         </div>
       </aside>

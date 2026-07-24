@@ -46,15 +46,23 @@ function spkiToXY(spki: ArrayBuffer): { x: Hex; y: Hex } {
   return { x: hex(point.subarray(1, 33)), y: hex(point.subarray(33, 65)) };
 }
 
-export async function createPasskey(label: string): Promise<PasskeyInfo> {
+/**
+ * `name` is what the platform credential manager stores and shows for this
+ * passkey; we pass the FULL account address (plus the up.id name when known) so
+ * the device's own credential list becomes an address backup — clear browser
+ * data and the address is still recoverable from Windows Hello / the OS keychain
+ * to re-add the account. `displayName` is a shorter human label; it falls back
+ * to `name` when omitted.
+ */
+export async function createPasskey(name: string, displayName?: string): Promise<PasskeyInfo> {
   const cred = (await navigator.credentials.create({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       rp: { name: "Suho", id: "localhost" },
       user: {
         id: crypto.getRandomValues(new Uint8Array(16)),
-        name: label,
-        displayName: label,
+        name,
+        displayName: displayName ?? name,
       },
       pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256/P-256 only
       authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },

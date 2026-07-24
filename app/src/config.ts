@@ -5,6 +5,7 @@ export const GUARDIAN = "http://localhost:8787";
 // docs root (there is no docs hero). Env-configurable via VITE_DOCS_URL.
 export const DOCS_URL =
   import.meta.env.VITE_DOCS_URL ?? "http://localhost:8899/docs/overview/what-is-suho.html";
+export const GITHUB_URL = "https://github.com/Cloakie47/suho";
 export const CHAIN_ID = 91342n;
 export const NORMAL_RPC = "https://sepolia-rpc.giwa.io";
 export const FLASH_RPC = "https://sepolia-rpc-flashblocks.giwa.io";

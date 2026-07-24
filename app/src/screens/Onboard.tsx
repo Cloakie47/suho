@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check, Copy } from "lucide-react";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { parseSignature, type Hex } from "viem";
 import { api } from "../api";
@@ -94,7 +95,15 @@ export function Onboard({
   onLegacy: () => void;
 }) {
   const [stage, setStage] = useState<Stage>({ k: "intro" });
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
   const toast = useToast();
+
+  const copyAddress = async (address: string) => {
+    await navigator.clipboard.writeText(address).catch(() => {});
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
 
   const create = async () => {
     try {
@@ -103,7 +112,10 @@ export function Onboard({
       const address = boot.address;
 
       setStage({ k: "working", note: "Creating your passkey. No seed phrase exists." });
-      const passkey = await createPasskey(`suho ${shortAddr(address)}`);
+      // user.name = the FULL address, so the device credential manager itself is
+      // an address backup (a fresh account has no up.id yet). displayName stays
+      // short for readability in the OS chooser.
+      const passkey = await createPasskey(address, `suho ${shortAddr(address)}`);
       storeCredential(address, passkey.credentialId);
 
       setStage({ k: "working", note: "Preparing your account…" });
@@ -173,17 +185,38 @@ export function Onboard({
           <div className="card center">
             <div className="big-check">✓</div>
             <div className="hero">Your account exists.</div>
-            <p className="mono muted">{stage.address}</p>
             <p className="muted">
               Not yet verified, balance 0. The guided steps on your home screen finish the setup.
             </p>
+
+            <div className="save-address">
+              <div className="save-address-label">Your account address</div>
+              <button
+                className="address-xl mono"
+                onClick={() => copyAddress(stage.address)}
+                title="Copy address"
+              >
+                <span>{stage.address}</span>
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+              <p className="save-address-note">
+                Save this address. Your passkey stays on this device, but if you clear browser
+                data you will need the address to add the account back.
+              </p>
+            </div>
+
+            <label className="ack">
+              <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
+              <span>I have saved this address.</span>
+            </label>
+
             <p className="mono muted">
               <a href={`${EXPLORER}/tx/${stage.txHash}`} target="_blank" rel="noreferrer">
                 activation tx {shortAddr(stage.txHash)}
               </a>
             </p>
             <hr className="hairline" />
-            <button className="primary wide" onClick={onDone}>
+            <button className="primary wide" onClick={onDone} disabled={!saved}>
               Enter Suho
             </button>
           </div>

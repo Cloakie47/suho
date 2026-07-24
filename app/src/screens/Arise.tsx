@@ -52,10 +52,12 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   const createNew = async () => {
     setBusy("Waiting for Windows Hello. This is the new device's passkey…");
     try {
-      // Label the new passkey with the account's up.id so it is identifiable
-      // in the device credential manager (falls back to the address).
-      const label = status.upId ? `${status.upId}.up.id` : shortAddr(activeAccount());
-      const key = await createPasskey(label);
+      // user.name carries the FULL account address (plus the up.id when known)
+      // so the device credential manager doubles as an address backup. The
+      // shorter displayName stays readable in the OS chooser.
+      const account = activeAccount();
+      const name = status.upId ? `${status.upId}.up.id · ${account}` : account;
+      const key = await createPasskey(name, status.upId ? `${status.upId}.up.id` : shortAddr(account));
       setStage({ k: "created", key });
     } catch (e) {
       if (isUserCancel(e)) {
