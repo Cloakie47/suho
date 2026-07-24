@@ -64,8 +64,12 @@ The guardian reads these from the environment. Keys come from `.env` locally, fr
 | --- | --- |
 | `PORT` | Listen port. Railway injects it; falls back to 8787 locally. |
 | `SUHO_CORS_ORIGINS` | Comma-separated origin allowlist, e.g. `https://your-domain`. Unset means open (`*`), which is the dev default. |
+| `SUHO_RELAYER_FLOOR_WEI` | Below this relayer balance, sponsored onboarding pauses (reimbursed ops continue). `0` or unset disables the floor. |
+| `SUHO_ONBOARD_DAILY_CAP` | Max sponsored onboardings per UTC day (default 200). |
 | `DEPLOYER_PRIVATE_KEY` | Relayer key (pays gas) and SuhoCodeAttester issuer. Testnet only. |
 | `ALICE_PRIVATE_KEY` | Legacy demo EOA key, held only for the one-time 7702 upgrade. Testnet only. |
+
+`GET /health` reports the live relayer balance, floor state, onboarding counts, relays served, and chain head with no secrets. See [Costs and limits](/developers/costs) for the reimbursement model and the sponsored-onboarding caps.
 
 ```bash
 cd guardian

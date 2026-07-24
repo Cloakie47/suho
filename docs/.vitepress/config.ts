@@ -89,6 +89,7 @@ export default defineConfig({
         items: [
           { text: "Contracts and addresses", link: "/developers/contracts" },
           { text: "The findings", link: "/developers/findings" },
+          { text: "Costs and limits", link: "/developers/costs" },
           { text: "Running locally", link: "/developers/running" },
           { text: "Deploying", link: "/developers/deploying" },
         ],
