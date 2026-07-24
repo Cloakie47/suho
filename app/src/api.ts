@@ -20,6 +20,8 @@ export interface Status {
   accountNonce: string;
   demoReady?: boolean;
   demoRequiredWei?: string;
+  /** Global: sponsored onboarding is paused (relayer below its floor). */
+  sponsoredOnboardingPaused?: boolean;
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {

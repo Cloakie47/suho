@@ -109,6 +109,69 @@ app.use((req, res, next) => {
 // In-memory mirror of issued arise/otp codes (chain is the source of truth).
 const issuedCodes = new Map<string, { expiresAt: number }>();
 
+// ---- G4: operating in public — relayer floor, onboarding caps, metrics ----
+// Below the floor, sponsored onboarding pauses; reimbursed ops keep working.
+const RELAYER_FLOOR_WEI = BigInt(process.env.SUHO_RELAYER_FLOOR_WEI ?? "0"); // 0 = disabled
+const ONBOARD_DAILY_CAP = Number(process.env.SUHO_ONBOARD_DAILY_CAP ?? "200");
+const startedAt = Date.now();
+let relaysServed = 0;
+let sponsoredOnboardsToday = 0;
+let onboardDayUTC = new Date().getUTCDate();
+const onboardedPasskeys = new Set<string>(); // dedup key = public key pair, no PII
+let lastError: { at: number; where: string; message: string } | null = null;
+
+function noteError(where: string, e: unknown): void {
+  lastError = { at: Date.now(), where, message: String(e).slice(0, 200) };
+}
+function rollOnboardDay(): void {
+  const d = new Date().getUTCDate();
+  if (d !== onboardDayUTC) {
+    onboardDayUTC = d;
+    sponsoredOnboardsToday = 0;
+  }
+}
+let relayerBalCache: { at: number; wei: bigint } | null = null;
+async function relayerBalanceCached(ttlMs = 10_000): Promise<bigint> {
+  const now = Date.now();
+  if (relayerBalCache && now - relayerBalCache.at < ttlMs) return relayerBalCache.wei;
+  const wei = await publicClient.getBalance({ address: relayerAccount.address });
+  relayerBalCache = { at: now, wei };
+  return wei;
+}
+async function sponsoredOnboardingPaused(): Promise<boolean> {
+  if (RELAYER_FLOOR_WEI === 0n) return false;
+  return (await relayerBalanceCached()) < RELAYER_FLOOR_WEI;
+}
+
+// ---- GET /health (public, no secrets) ----
+app.get("/health", async (_req, res) => {
+  try {
+    rollOnboardDay();
+    const [bal, normalHead, flashHead] = await Promise.all([
+      relayerBalanceCached(0),
+      publicClient.getBlockNumber(),
+      flashClient.getBlockNumber().catch(() => 0n),
+    ]);
+    res.json({
+      ok: true,
+      uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
+      relayer: relayerAccount.address, // address only, never the key
+      relayerBalanceWei: bal.toString(),
+      relayerFloorWei: RELAYER_FLOOR_WEI.toString(),
+      sponsoredOnboardingPaused: RELAYER_FLOOR_WEI > 0n && bal < RELAYER_FLOOR_WEI,
+      sponsoredOnboardsToday,
+      onboardDailyCap: ONBOARD_DAILY_CAP,
+      relaysServed,
+      chainHead: normalHead.toString(),
+      flashHead: flashHead.toString(),
+      headLag: (flashHead > normalHead ? flashHead - normalHead : 0n).toString(),
+      lastError,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
 async function verifiedBy(address: Hex): Promise<string | null> {
   for (const a of ATTESTER_IDS) {
     const ok = await publicClient.readContract({
@@ -249,6 +312,8 @@ app.get("/status", async (req, res) => {
       accountNonce,
       demoReady: demoRequiredWei > 0n ? balance >= demoRequiredWei : true,
       demoRequiredWei: demoRequiredWei.toString(),
+      // Global service state: onboarding pauses when the relayer is below floor.
+      sponsoredOnboardingPaused: await sponsoredOnboardingPaused(),
     });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -370,12 +435,14 @@ app.post("/relay", async (req, res) => {
       functionName: "execute",
       args: execArgs,
     });
+    relaysServed++;
     res.json({ txHash, explorer: explorerTx(txHash) }); // client watches Flashblocks
   } catch (e) {
     // Surface the contract's typed error name (OtpRequired, CodeInvalid, ...)
     // so the app can branch — e.g. open the OTP interstitial.
     const name = revertName(e);
     if (name) return res.status(400).json({ error: name });
+    noteError("relay", e);
     res.status(500).json({ error: String(e) });
   }
 });
@@ -460,6 +527,16 @@ app.post("/onboard", async (req, res) => {
     }
     onboardHits.set(ip, [...hits, now]);
 
+    // G4: sponsored onboarding is the only free operation, so it is capped.
+    rollOnboardDay();
+    if (await sponsoredOnboardingPaused()) {
+      // Relayer below floor: pause creation, keep reimbursed ops working.
+      return res.status(503).json({ error: "OnboardingPaused" });
+    }
+    if (sponsoredOnboardsToday >= ONBOARD_DAILY_CAP) {
+      return res.status(429).json({ error: "OnboardingDailyCapReached" });
+    }
+
     const { address, authorization, initSig, passkey } = req.body as {
       address: Hex;
       authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
@@ -470,6 +547,12 @@ app.post("/onboard", async (req, res) => {
     // validate before spending relayer gas
     if (!/^0x[0-9a-fA-F]{40}$/.test(address ?? "")) {
       return res.status(400).json({ error: "invalid address" });
+    }
+    // Duplicate-passkey check: one passkey cannot farm onboardings. The key is a
+    // public key pair, not PII.
+    const pkKey = `${passkey.x.toLowerCase()}:${passkey.y.toLowerCase()}`;
+    if (onboardedPasskeys.has(pkKey)) {
+      return res.status(400).json({ error: "PasskeyAlreadyOnboarded" });
     }
     const code = await publicClient.getCode({ address });
     if (code && code !== "0x") {
@@ -528,8 +611,13 @@ app.post("/onboard", async (req, res) => {
       }
       if (!initialized) await new Promise((r) => setTimeout(r, 800));
     }
+    if (receipt.status === "success") {
+      sponsoredOnboardsToday++;
+      onboardedPasskeys.add(pkKey);
+    }
     res.json({ status: receipt.status, txHash, explorer: explorerTx(txHash), initialized });
   } catch (e) {
+    noteError("onboard", e);
     res.status(500).json({ error: String(e).slice(0, 400) });
   }
 });

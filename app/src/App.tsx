@@ -504,6 +504,7 @@ export default function App() {
   if (!onboarded || addingAccount) {
     return (
       <Onboard
+        paused={status?.sponsoredOnboardingPaused ?? false}
         onDone={() => {
           setStatus(null);
           setOnboarded(true);

@@ -90,9 +90,11 @@ function makeBootstrap(): Bootstrap {
 export function Onboard({
   onDone,
   onLegacy,
+  paused = false,
 }: {
   onDone: () => void;
   onLegacy: () => void;
+  paused?: boolean;
 }) {
   const [stage, setStage] = useState<Stage>({ k: "intro" });
   const [saved, setSaved] = useState(false);
@@ -164,7 +166,12 @@ export function Onboard({
             <p className="muted">
               A passkey account on GIWA. No seed phrase, no gas to start.
             </p>
-            <button className="primary wide" onClick={create}>
+            {paused && (
+              <div className="status-banner" role="status" style={{ marginBottom: 12 }}>
+                New account creation is paused. The demo relayer needs a top-up.
+              </div>
+            )}
+            <button className="primary wide" onClick={create} disabled={paused}>
               Create your Suho account
             </button>
             <button className="secondary" onClick={onLegacy} style={{ fontSize: "0.8rem" }}>
