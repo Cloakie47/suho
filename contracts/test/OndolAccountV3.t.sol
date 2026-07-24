@@ -298,4 +298,67 @@ contract OndolAccountV3Test is OndolTestBase {
         assertEq(VERIFIED_RECIPIENT.balance, recBefore + 0.1 ether, "legacy V2 transfer landed");
         assertEq(OndolAccountV2(payable(v2acct)).nonce(), 1, "legacy V2 nonce advanced");
     }
+
+    // ---- 9. proxy-init signature is bound to its account (no cross-account replay) ----
+
+    /// A's signed implementation choice cannot be replayed onto B: the proxy
+    /// domain binds verifyingContract, so A's signature recovers to A (or garbage)
+    /// on B, never to B. B stays installable only by B's own key.
+    function test_9_proxyInitSig_crossAccountReplay_reverts() public {
+        (address eoaA, uint256 pkA) = makeAddrAndKey("proxy-replay-a");
+        (address eoaB, uint256 pkB) = makeAddrAndKey("proxy-replay-b");
+        vm.signAndAttachDelegation(address(proxyImpl), pkA);
+        vm.signAndAttachDelegation(address(proxyImpl), pkB);
+
+        (bytes32 x, bytes32 y) = _passkeyXY();
+        // Well-formed initData (A's passkey init sig); irrelevant to the reverts,
+        // which fire at the proxy signature check before any delegatecall.
+        bytes memory initDataA = _initDataFor(eoaA, pkA, x, y);
+
+        // Replay A's signature (over A's own domain) onto B.
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(pkA, _proxyInitDigest(eoaA, address(implV3)));
+            vm.prank(relayer3);
+            vm.expectRevert(OndolProxy.InvalidInitSignature.selector);
+            OndolProxy(payable(eoaB)).initialize(address(implV3), initDataA, v, r, s);
+        }
+        // Even A signing for B's ADDRESS recovers to A, not B — still rejected.
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(pkA, _proxyInitDigest(eoaB, address(implV3)));
+            vm.prank(relayer3);
+            vm.expectRevert(OndolProxy.InvalidInitSignature.selector);
+            OndolProxy(payable(eoaB)).initialize(address(implV3), initDataA, v, r, s);
+        }
+        // B's implementation slot is still empty (both attempts reverted). Read
+        // the ERC-1967 slot directly: an uninitialized proxy has no impl, so a
+        // view call through the fallback would delegatecall address(0).
+        assertEq(
+            vm.load(eoaB, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc),
+            bytes32(0),
+            "B never had an implementation installed by A's signature"
+        );
+
+        // Positive control: B installs fine with B's OWN signatures.
+        {
+            bytes memory initDataB = _initDataFor(eoaB, pkB, x, y);
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(pkB, _proxyInitDigest(eoaB, address(implV3)));
+            vm.prank(relayer3);
+            OndolProxy(payable(eoaB)).initialize(address(implV3), initDataB, v, r, s);
+        }
+        assertTrue(OndolAccountV3(payable(eoaB)).initialized(), "B installs with its own signatures");
+        assertEq(OndolAccountV3(payable(eoaB)).implementation(), address(implV3));
+    }
+
+    /// @dev Build initializeWithSig calldata for `acct`, passkey-signed by `pk`.
+    function _initDataFor(address acct, uint256 pk, bytes32 x, bytes32 y)
+        internal
+        view
+        returns (bytes memory)
+    {
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(pk, _initDigest(acct, x, y, address(guard), address(arise)));
+        return abi.encodeCall(
+            OndolAccountV3.initializeWithSig, (x, y, address(guard), address(arise), v, r, s)
+        );
+    }
 }
