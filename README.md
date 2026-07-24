@@ -61,6 +61,32 @@ Similarly, the Suho Card renders its own honesty line: *identity is verified by
 Dojang; card fields are self-declared by the verified owner.* The seal attests
 the human — the fields are their claims.
 
+## Upgradeable accounts (Phase G) and migration reality
+
+New accounts delegate to `OndolProxy`, a minimal ERC-1967 proxy, instead of
+straight to an implementation. The account can then move to a new implementation
+via `OndolAccountV3.upgradeTo`, reachable only through a passkey-signed
+`execute()` — the passkey is the sole upgrade authority, no admin or guardian.
+Installing the implementation is authorized by the account's own key signing
+*which* implementation the proxy may install; that signature defeats a mempool
+replay of the 7702 authorization (an attacker cannot point the account at a
+hostile implementation, nor initialize the real one with their own passkey). V3
+also reimburses gas up to a passkey-signed cap (`maxGasPayment`), so a relayer is
+made whole without being able to inflate the charge; a zero cap is the sponsored
+path onboarding uses.
+
+Migration is binding:
+
+- **Live-key accounts (alice):** delegated straight to V1/V2 with the EOA key
+  still held. Can re-delegate to the proxy and become upgradeable.
+- **Gasless-onboarded accounts (key destroyed):** the delegation cannot be
+  re-signed, so they stay on V2 permanently. They keep working but cannot
+  upgrade. The app shows a "cannot upgrade" note; do **not** attempt to
+  re-delegate them.
+- **From Phase G on:** proxy-fronted at creation, upgradeable by their passkey.
+
+`/status` reports each account's `delegationShape` and an `upgradeable` flag.
+
 ## Probe findings (empirical, on live GIWA Sepolia)
 
 - **EIP-7702**: fully supported. Type-4 delegation, execution at the EOA's
