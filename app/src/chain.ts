@@ -60,25 +60,50 @@ export async function accountNonce(account: Hex): Promise<bigint> {
   return a > b ? a : b;
 }
 
-/** Must mirror OndolAccount: keccak256(abi.encode(account, chainid, nonce, calls)). */
-export function computeChallenge(account: Hex, nonce: bigint, calls: Call[]): Hex {
-  return keccak256(
-    encodeAbiParameters(
-      [
-        { type: "address" },
-        { type: "uint256" },
-        { type: "uint256" },
-        {
-          type: "tuple[]",
-          components: [
-            { name: "target", type: "address" },
-            { name: "value", type: "uint256" },
-            { name: "data", type: "bytes" },
-          ],
-        },
+// ERC-1967 implementation slot: a non-zero value means the account is
+// proxy-fronted (V3, upgradeable). Legacy V1/V2 leave it empty.
+const ERC1967_IMPL_SLOT =
+  "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc" as const;
+
+/** True for proxy-fronted (V3) accounts, which use the capped execute. */
+export async function isUpgradeable(account: Hex): Promise<boolean> {
+  const v = await flashClient.getStorageAt({ address: account, slot: ERC1967_IMPL_SLOT });
+  return !!v && BigInt(v) !== 0n;
+}
+
+/** Mirrors the account's execute challenge. V2: keccak(account, chain, nonce,
+ *  calls). V3 (maxGasPayment provided): keccak(account, chain, nonce, calls,
+ *  maxGasPayment) — the signed cap is part of the challenge. */
+export function computeChallenge(
+  account: Hex,
+  nonce: bigint,
+  calls: Call[],
+  maxGasPayment?: bigint,
+): Hex {
+  const base = [
+    { type: "address" as const },
+    { type: "uint256" as const },
+    { type: "uint256" as const },
+    {
+      type: "tuple[]" as const,
+      components: [
+        { name: "target", type: "address" as const },
+        { name: "value", type: "uint256" as const },
+        { name: "data", type: "bytes" as const },
       ],
-      [account, CHAIN_ID, nonce, calls],
-    ),
+    },
+  ];
+  if (maxGasPayment === undefined) {
+    return keccak256(encodeAbiParameters(base, [account, CHAIN_ID, nonce, calls]));
+  }
+  return keccak256(
+    encodeAbiParameters([...base, { type: "uint256" as const }], [
+      account,
+      CHAIN_ID,
+      nonce,
+      calls,
+      maxGasPayment,
+    ]),
   );
 }
 

@@ -9,7 +9,8 @@ import {
   EXPLORER,
   GUARD_ADDRESS,
   storeCredential,
-  ONDOL_V2_IMPL,
+  ONDOL_PROXY,
+  ONDOL_V3_IMPL,
   setActiveAccount,
 } from "../config";
 import { createPasskey } from "../webauthn";
@@ -28,6 +29,7 @@ interface Bootstrap {
   sign(passkey: { x: Hex; y: Hex }): Promise<{
     authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
     initSig: { v: number; r: Hex; s: Hex };
+    proxySig: { v: number; r: Hex; s: Hex };
   }>;
 }
 
@@ -49,14 +51,15 @@ function makeBootstrap(): Bootstrap {
     address,
     async sign(passkey) {
       const acct = eoa!;
-      // signature 1: 7702 authorization (nonce 0, fresh EOA, relayer submits)
+      // signature 1: 7702 authorization delegating to the PROXY (nonce 0, fresh
+      // EOA, relayer submits). Phase G: new accounts are proxy-fronted.
       const auth = await acct.signAuthorization({
-        contractAddress: ONDOL_V2_IMPL,
+        contractAddress: ONDOL_PROXY,
         chainId: 91342,
         nonce: 0,
       });
-      // signature 2: EIP-712 digest authorizing the first passkey
-      const sig = await acct.signTypedData({
+      // signature 2: EIP-712 Init digest authorizing the first passkey (V3, "2")
+      const initTyped = await acct.signTypedData({
         domain: { name: "Suho Ondol", version: "2", chainId: 91342, verifyingContract: address },
         types: {
           Init: [
@@ -69,19 +72,29 @@ function makeBootstrap(): Bootstrap {
         primaryType: "Init",
         message: { x: passkey.x, y: passkey.y, guard: GUARD_ADDRESS, arise: ARISE_ADDRESS },
       });
-      const parsed = parseSignature(sig);
+      // signature 3: EIP-712 ProxyInit digest binding WHICH implementation the
+      // proxy may install. Defeats a mempool replay of the 7702 authorization.
+      const proxyTyped = await acct.signTypedData({
+        domain: { name: "Suho Ondol Proxy", version: "1", chainId: 91342, verifyingContract: address },
+        types: { ProxyInit: [{ name: "implementation", type: "address" }] },
+        primaryType: "ProxyInit",
+        message: { implementation: ONDOL_V3_IMPL },
+      });
+      const initP = parseSignature(initTyped);
+      const proxyP = parseSignature(proxyTyped);
       pk = null;
       eoa = null; // key's job is done, drop every reference
       return {
         authorization: {
-          address: auth.address ?? ONDOL_V2_IMPL,
+          address: auth.address ?? ONDOL_PROXY,
           chainId: 91342,
           nonce: 0,
           r: auth.r,
           s: auth.s,
           yParity: auth.yParity ?? 0,
         },
-        initSig: { v: Number(parsed.v ?? BigInt(27 + (parsed.yParity ?? 0))), r: parsed.r, s: parsed.s },
+        initSig: { v: Number(initP.v ?? BigInt(27 + (initP.yParity ?? 0))), r: initP.r, s: initP.s },
+        proxySig: { v: Number(proxyP.v ?? BigInt(27 + (proxyP.yParity ?? 0))), r: proxyP.r, s: proxyP.s },
       };
     },
   };
@@ -121,13 +134,14 @@ export function Onboard({
       storeCredential(address, passkey.credentialId);
 
       setStage({ k: "working", note: "Preparing your account…" });
-      const { authorization, initSig } = await boot.sign({ x: passkey.x, y: passkey.y });
+      const { authorization, initSig, proxySig } = await boot.sign({ x: passkey.x, y: passkey.y });
 
       setStage({ k: "working", note: "Activating on GIWA. The guardian pays the gas…" });
       const r = await api.onboard({
         address,
         authorization,
         initSig,
+        proxySig,
         passkey: { x: passkey.x, y: passkey.y },
       });
       if (r.status !== "success" || !r.initialized) {

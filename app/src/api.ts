@@ -63,8 +63,21 @@ export const api = {
       "/upgrade",
       post({ address, passkey }),
     ),
-  relay: (account: Hex, calls: { target: Hex; value: string; data: Hex }[], otpCode: string, webauthn: AssertionPayload) =>
-    req<{ txHash: Hex; explorer: string }>("/relay", post({ account, calls, otpCode, webauthn })),
+  /** maxGasPayment (wei string) is signed into the V3 challenge for proxy
+   *  accounts; omit it for legacy V2 accounts (3-arg execute). */
+  relay: (
+    account: Hex,
+    calls: { target: Hex; value: string; data: Hex }[],
+    otpCode: string,
+    webauthn: AssertionPayload,
+    maxGasPayment?: string,
+  ) =>
+    req<{ txHash: Hex; explorer: string }>(
+      "/relay",
+      post({ account, calls, otpCode, webauthn, maxGasPayment }),
+    ),
+  fee: () =>
+    req<{ maxGasPayment: string; gasPrice: string; l1UpperBound: string; eth: string }>("/fee"),
   otpRequest: (account: Hex, recipient: Hex, value: string) =>
     req<{ ok: boolean; expiresAt: number; attestationTx: string }>(
       "/otp/request",
@@ -86,6 +99,8 @@ export const api = {
     address: Hex;
     authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
     initSig: { v: number; r: Hex; s: Hex };
+    /** ProxyInit signature over the V3 implementation the proxy may install. */
+    proxySig: { v: number; r: Hex; s: Hex };
     passkey: { x: Hex; y: Hex };
   }) =>
     req<{ status: string; txHash: Hex; explorer: string; initialized: boolean }>(

@@ -26,6 +26,9 @@ import {
   DELEGATION_PREFIX,
   ERC1967_IMPL_SLOT,
   ondolProxyImpl,
+  ondolAccountV3Impl,
+  ondolProxyAbi,
+  ondolV3Abi,
   GAS_ORACLE,
   gasOracleAbi,
   dojangScrollAbi,
@@ -399,11 +402,12 @@ app.post("/upgrade", async (req, res) => {
 // Dumb relayer: encodes execute() and pays gas. Authority is the passkey sig.
 app.post("/relay", async (req, res) => {
   try {
-    const { account, calls, otpCode, webauthn } = req.body as {
+    const { account, calls, otpCode, webauthn, maxGasPayment } = req.body as {
       account: Hex;
       calls: { target: Hex; value: string; data?: Hex }[];
       otpCode?: string;
       webauthn: BrowserAssertion;
+      maxGasPayment?: string; // present => V3 (capped 4-arg execute)
     };
     const sig = encodeWebAuthnSig(webauthn); // DER -> (r,s) -> low-s, one place
     const encodedCalls = calls.map((c) => ({
@@ -411,30 +415,60 @@ app.post("/relay", async (req, res) => {
       value: BigInt(c.value),
       data: c.data ?? "0x",
     }));
-    const execArgs = [encodedCalls, otpCode ?? "", sig] as const;
 
-    // G3 preflight: eth_call the exact tx first. On revert, refuse with the
-    // typed error and spend no gas — the doomed tx is never submitted.
-    try {
-      await publicClient.simulateContract({
-        account: relayerAccount.address,
+    // Proxy-fronted (V3) accounts use the capped 4-arg execute; legacy V1/V2 use
+    // the 3-arg execute. The client signs the matching challenge, so the shape is
+    // driven by whether it sent a maxGasPayment. Each branch is fully typed.
+    const preflight = async (fn: () => Promise<unknown>): Promise<string | null> => {
+      // returns a typed-error name to refuse with (no gas), or null to proceed
+      try {
+        await fn();
+        return null;
+      } catch (e) {
+        const name = revertName(e);
+        if (name) return name;
+        throw e;
+      }
+    };
+
+    let txHash: Hex;
+    if (maxGasPayment !== undefined && maxGasPayment !== null) {
+      const args = [encodedCalls, otpCode ?? "", BigInt(maxGasPayment), sig] as const;
+      const refused = await preflight(() =>
+        publicClient.simulateContract({
+          account: relayerAccount.address,
+          address: account,
+          abi: ondolV3Abi,
+          functionName: "execute",
+          args,
+        }),
+      );
+      if (refused) return res.status(400).json({ error: refused });
+      txHash = await relayerWallet.writeContract({
+        address: account,
+        abi: ondolV3Abi,
+        functionName: "execute",
+        args,
+      });
+    } else {
+      const args = [encodedCalls, otpCode ?? "", sig] as const;
+      const refused = await preflight(() =>
+        publicClient.simulateContract({
+          account: relayerAccount.address,
+          address: account,
+          abi: ondolAccountAbi,
+          functionName: "execute",
+          args,
+        }),
+      );
+      if (refused) return res.status(400).json({ error: refused });
+      txHash = await relayerWallet.writeContract({
         address: account,
         abi: ondolAccountAbi,
         functionName: "execute",
-        args: execArgs,
+        args,
       });
-    } catch (e) {
-      const name = revertName(e);
-      if (name) return res.status(400).json({ error: name });
-      throw e; // non-revert (RPC/network): fall through to the 500 below
     }
-
-    const txHash = await relayerWallet.writeContract({
-      address: account,
-      abi: ondolAccountAbi,
-      functionName: "execute",
-      args: execArgs,
-    });
     relaysServed++;
     res.json({ txHash, explorer: explorerTx(txHash) }); // client watches Flashblocks
   } catch (e) {
@@ -537,16 +571,20 @@ app.post("/onboard", async (req, res) => {
       return res.status(429).json({ error: "OnboardingDailyCapReached" });
     }
 
-    const { address, authorization, initSig, passkey } = req.body as {
+    const { address, authorization, initSig, proxySig, passkey } = req.body as {
       address: Hex;
       authorization: { address: Hex; chainId: number; nonce: number; r: Hex; s: Hex; yParity: number };
       initSig: { v: number; r: Hex; s: Hex };
+      proxySig: { v: number; r: Hex; s: Hex };
       passkey: { x: Hex; y: Hex };
     };
 
     // validate before spending relayer gas
     if (!/^0x[0-9a-fA-F]{40}$/.test(address ?? "")) {
       return res.status(400).json({ error: "invalid address" });
+    }
+    if (!ondolProxyImpl || !ondolAccountV3Impl) {
+      return res.status(503).json({ error: "proxy/V3 not configured" });
     }
     // Duplicate-passkey check: one passkey cannot farm onboardings. The key is a
     // public key pair, not PII.
@@ -558,8 +596,10 @@ app.post("/onboard", async (req, res) => {
     if (code && code !== "0x") {
       return res.status(400).json({ error: "address already has code — onboarding is for fresh accounts" });
     }
-    if (authorization.address.toLowerCase() !== ADDR.ondolAccountV2Impl.toLowerCase()) {
-      return res.status(400).json({ error: "authorization must target the OndolAccountV2 implementation" });
+    // Phase G: new accounts delegate to the PROXY (upgradeable), not straight to
+    // an implementation.
+    if (authorization.address.toLowerCase() !== ondolProxyImpl.toLowerCase()) {
+      return res.status(400).json({ error: "authorization must target the OndolProxy" });
     }
     if (authorization.chainId !== giwaSepolia.id && authorization.chainId !== 0) {
       return res.status(400).json({ error: "authorization chainId mismatch" });
@@ -568,20 +608,27 @@ app.post("/onboard", async (req, res) => {
       return res.status(400).json({ error: "authorization nonce must be 0 (fresh EOA)" });
     }
 
+    // initData runs V3.initializeWithSig behind the proxy (its own passkey sig);
+    // the proxy authorizes the impl choice with the EOA's proxySig.
+    const initData = encodeFunctionData({
+      abi: ondolV3Abi,
+      functionName: "initializeWithSig",
+      args: [
+        passkey.x,
+        passkey.y,
+        ADDR.ondolTransferGuard,
+        ADDR.ariseModule,
+        initSig.v,
+        initSig.r,
+        initSig.s,
+      ],
+    });
     const txHash = await relayerWallet.sendTransaction({
       to: address,
       data: encodeFunctionData({
-        abi: ondolV2Abi,
-        functionName: "initializeWithSig",
-        args: [
-          passkey.x,
-          passkey.y,
-          ADDR.ondolTransferGuard,
-          ADDR.ariseModule,
-          initSig.v,
-          initSig.r,
-          initSig.s,
-        ],
+        abi: ondolProxyAbi,
+        functionName: "initialize",
+        args: [ondolAccountV3Impl, initData, proxySig.v, proxySig.r, proxySig.s],
       }),
       authorizationList: [
         {

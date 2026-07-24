@@ -99,6 +99,35 @@ export const ondolV2Abi = parseAbi([
   "error InvalidInitSignature()",
 ]);
 
+// Phase G. OndolProxy.initialize installs the impl (EOA-signed) and runs initData.
+export const ondolProxyAbi = parseAbi([
+  "function initialize(address implementation, bytes initData, uint8 v, bytes32 r, bytes32 s) payable",
+  "error AlreadyInitialized()",
+  "error InvalidInitSignature()",
+  "error InitCallFailed(bytes returndata)",
+]);
+
+// OndolAccountV3: execute() takes the signed maxGasPayment; initializeWithSig is
+// byte-identical to V2. Same custom errors as V2's execute plus CannotCoverGas.
+export const ondolV3Abi = parseAbi([
+  "struct Call { address target; uint256 value; bytes data; }",
+  "function initializeWithSig(bytes32 x, bytes32 y, address guard_, address arise_, uint8 v, bytes32 r, bytes32 s)",
+  "function execute(Call[] calls, string otpCode, uint256 maxGasPayment, bytes webAuthnSig) payable",
+  "function upgradeTo(address newImplementation)",
+  "function nonce() view returns (uint256)",
+  "function initialized() view returns (bool)",
+  "function implementation() view returns (address)",
+  "error InvalidPasskeySignature()",
+  "error NotInitialized()",
+  "error CannotCoverGas()",
+  "error CallFailed(uint256 index, bytes returndata)",
+  "error OtpRequired()",
+  "error CodeNotFound()",
+  "error CodeInvalid()",
+  "error CodeExpired()",
+  "error CodeAlreadyUsed()",
+]);
+
 export const faucetExtensionAbi = parseAbi([
   "function payAndIssueEAS() payable",
   "function fee() view returns (uint256)",

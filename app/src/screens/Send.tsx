@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
+import { capForAccount } from "../execute";
 import { assertWithPasskey } from "../webauthn";
 import { activeAccount, isLegacyDemo, storedCredential, GUARDIAN, OTP_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
@@ -375,8 +376,11 @@ export function Send({
     try {
       setPhase({ k: "signing" });
       const calls: Call[] = [{ target: recipient.address, value, data: "0x" }];
-      const nonce = await accountNonce(activeAccount());
-      const challenge = computeChallenge(activeAccount(), nonce, calls);
+      const [nonce, maxGasPayment] = await Promise.all([
+        accountNonce(activeAccount()),
+        capForAccount(activeAccount()),
+      ]);
+      const challenge = computeChallenge(activeAccount(), nonce, calls, maxGasPayment);
       const webauthn = await assertWithPasskey(credentialId, challenge);
       setPhase({ k: "inflight" });
       // One toast per transaction; the verb matches the button that launched it.
@@ -388,6 +392,7 @@ export function Send({
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
         otpCode,
         webauthn,
+        maxGasPayment?.toString(),
       );
       const timing = await watchReceipt(txHash, t0, {
         preconf: (ms) => h.preconfirmed("Sent", ms),

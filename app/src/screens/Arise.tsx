@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { encodeAbiParameters, keccak256, parseEther, type Hex } from "viem";
 import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
+import { capForAccount } from "../execute";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
 import { activeAccount, EXPLORER, GUARDIAN, storedCredential, storeCredential } from "../config";
 import { Spinner, shortAddr } from "../ui";
@@ -116,8 +117,11 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
     try {
       const target = (await api.resolve("suho")).address!;
       const calls: Call[] = [{ target, value: parseEther("0.0001"), data: "0x" }];
-      const nonce = await accountNonce(activeAccount());
-      const challenge = computeChallenge(activeAccount(), nonce, calls);
+      const [nonce, maxGasPayment] = await Promise.all([
+        accountNonce(activeAccount()),
+        capForAccount(activeAccount()),
+      ]);
+      const challenge = computeChallenge(activeAccount(), nonce, calls, maxGasPayment);
       const webauthn = await assertWithPasskey(credentialId, challenge);
       handle = toast.begin("Sending 0.0001 ETH to suho.up.id…");
       const h = handle;
@@ -127,6 +131,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
         "",
         webauthn,
+        maxGasPayment?.toString(),
       );
       const timing = await watchReceipt(txHash, t0, {
         preconf: (ms) => h.preconfirmed("Sent", ms),

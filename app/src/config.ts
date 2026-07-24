@@ -20,6 +20,9 @@ export const DEMO_ACCOUNT = "0xacc2a6Eb741E147e8D3Ed9213b070656c908Adad" as cons
 export const ONDOL_V2_IMPL = "0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69" as const;
 export const GUARD_ADDRESS = "0x106953DB14B1183378976E128AE5cd40C4b493d2" as const;
 export const ARISE_ADDRESS = "0x827375200CF4595f71b09497A65BAF10Ca907466" as const;
+// Phase G: new accounts delegate to the proxy and initialize with V3 behind it.
+export const ONDOL_PROXY = "0x5641D0D42bCD6450BE30077998Fe64F263A4887B" as const;
+export const ONDOL_V3_IMPL = "0xff164E70038EB91c342981d95f1f59d04499399E" as const;
 
 export const LS_ACCOUNT = "suho.account";
 export const LS_ACCOUNTS = "suho.accounts";
