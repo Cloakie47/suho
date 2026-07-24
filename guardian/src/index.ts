@@ -81,9 +81,21 @@ app.use((req, res, next) => {
   }
   next();
 });
-// CORS open to the app's localhost port (spec §2)
+// CORS. Dev default is open ("*"); in production set SUHO_CORS_ORIGINS to a
+// comma-separated allowlist (e.g. "https://suho.vercel.app") and only those
+// origins are echoed back. Nothing else about the API changes.
+const CORS_ALLOW = (process.env.SUHO_CORS_ORIGINS ?? "*")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 app.use((req, res, next) => {
-  res.setHeader("access-control-allow-origin", "*");
+  const origin = req.headers.origin;
+  if (CORS_ALLOW.includes("*")) {
+    res.setHeader("access-control-allow-origin", "*");
+  } else if (origin && CORS_ALLOW.includes(origin)) {
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "origin");
+  }
   res.setHeader("access-control-allow-headers", "content-type");
   res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -555,10 +567,12 @@ app.post("/arise/complete", async (req, res) => {
   }
 });
 
-const PORT = 8787;
+// PORT from env for hosted deploys (Railway injects it); 8787 for local dev.
+const PORT = Number(process.env.PORT) || 8787;
 app.listen(PORT, () => {
-  console.log(`suho guardian on http://localhost:${PORT} (chain ${giwaSepolia.id})`);
+  console.log(`suho guardian on :${PORT} (chain ${giwaSepolia.id})`);
   console.log(`relayer/issuer: ${relayerAccount.address}`);
   console.log(`demo EOA:       ${aliceAccount.address}`);
+  console.log(`CORS: ${CORS_ALLOW.includes("*") ? "open (*)" : CORS_ALLOW.join(", ")}`);
   prewarmDirectory();
 });

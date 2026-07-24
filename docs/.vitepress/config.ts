@@ -90,6 +90,7 @@ export default defineConfig({
           { text: "Contracts and addresses", link: "/developers/contracts" },
           { text: "The findings", link: "/developers/findings" },
           { text: "Running locally", link: "/developers/running" },
+          { text: "Deploying", link: "/developers/deploying" },
         ],
       },
     ],

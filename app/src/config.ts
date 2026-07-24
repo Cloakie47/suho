@@ -1,4 +1,6 @@
-export const GUARDIAN = "http://localhost:8787";
+// The guardian is a separate origin in production. Set VITE_GUARDIAN_URL at
+// build time to the deployed guardian; defaults to the local dev process.
+export const GUARDIAN = import.meta.env.VITE_GUARDIAN_URL ?? "http://localhost:8787";
 // The docs are a SEPARATE static origin (site/docs), not part of this SPA. A
 // relative path would hit Vite's SPA fallback and route to Send, so this must
 // be an absolute URL. It points straight at the first content page, never the
