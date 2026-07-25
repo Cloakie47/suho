@@ -17,8 +17,15 @@ function db(): pg.Pool {
   if (!connectionString) throw new Error("DATABASE_URL is not set");
   // Managed Postgres (Railway) terminates TLS; allow it without a local CA.
   const ssl = /localhost|127\.0\.0\.1/.test(connectionString) ? undefined : { rejectUnauthorized: false };
-  pool = new pg.Pool({ connectionString, ssl, max: 5 });
+  pool = new pg.Pool({ connectionString, ssl, max: 5, idleTimeoutMillis: 30_000 });
   return pool;
+}
+
+/// Open a few connections up front. Over Railway's public proxy each fresh
+/// connection costs a ~3s TLS handshake; pre-warming keeps request latency down
+/// in local dev. On Railway's internal network this is already fast.
+export async function warmPool(n = 3): Promise<void> {
+  await Promise.all(Array.from({ length: n }, () => db().query("SELECT 1")));
 }
 
 const addr = (a: string) => a.toLowerCase();
@@ -129,6 +136,19 @@ export async function countRecentEmailEvents(opts: {
     params,
   );
   return rows[0].n as number;
+}
+
+/// Recent activity for the /ops view — addresses, kinds, timestamps only. Never
+/// a code or an email.
+export async function recentOps(limit = 25): Promise<{
+  events: { address: string; kind: string; sent_at: string }[];
+  audit: { action: string; address: string | null; at: string }[];
+}> {
+  const [ev, au] = await Promise.all([
+    db().query(`SELECT address, kind, sent_at FROM email_events ORDER BY sent_at DESC LIMIT $1`, [limit]),
+    db().query(`SELECT action, address, at FROM ops_audit ORDER BY at DESC LIMIT $1`, [limit]),
+  ]);
+  return { events: ev.rows, audit: au.rows };
 }
 
 export async function audit(action: string, address?: string): Promise<void> {

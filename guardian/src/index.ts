@@ -42,9 +42,22 @@ import {
   explorerTx,
 } from "./contracts.js";
 import { resolveName, reverseName } from "./upid.js";
-import { encodeWebAuthnSig, spkiToXY, type BrowserAssertion } from "./webauthn.js";
+import { encodeWebAuthnSig, spkiToXY, verifyAssertion, type BrowserAssertion } from "./webauthn.js";
+import {
+  initDb,
+  warmPool,
+  bindRecoveryEmail,
+  getRecovery,
+  recordEmailEvent,
+  countRecentEmailEvents,
+  recentOps,
+  audit,
+} from "./db.js";
+import { sendConfirmationCode, sendAriseCode, sendEmailChangeNotice } from "./email.js";
+import { emailHash, decryptEmail } from "./crypto.js";
+import { randomInt, randomBytes } from "node:crypto";
 import { printCodeBanner } from "./banner.js";
-import { recordCode, activeCodes, issuerPageHtml } from "./issuer.js";
+import { recordCode } from "./issuer.js";
 import { getDirectory, prewarmDirectory } from "./directory.js";
 import { getCard } from "./card.js";
 
@@ -514,14 +527,17 @@ app.post("/otp/request", async (req, res) => {
   }
 });
 
-// ---- Verification Service portal (Phase T item 4) ----
-app.get("/issuer", (_req, res) => {
-  res.setHeader("content-type", "text/html; charset=utf-8");
-  res.send(issuerPageHtml());
-});
-app.get("/issuer/codes", (_req, res) => {
-  res.json({ codes: activeCodes() });
-});
+// ---- H5: the /issuer portal is RETIRED as a delivery channel ----
+// Recovery codes go to email; transfer codes are retrieved passkey-gated and
+// shown only in the app. Monitoring moved to the token-gated /ops. A public code
+// display would be an account-takeover vector, which is why it no longer exists.
+app.get("/issuer", (_req, res) =>
+  res
+    .status(410)
+    .type("text/plain")
+    .send("The issuer portal is retired. Recovery codes are emailed; transfer codes are shown in-app. Monitoring: /ops."),
+);
+app.get("/issuer/codes", (_req, res) => res.status(410).json({ error: "retired; see /ops" }));
 
 // ---- GET /directory[?q=...][&refresh=1] ----
 // D1: active, verified up.id names only — this list IS the trust surface.
@@ -754,31 +770,48 @@ app.get("/demo-credential", (_req, res) => {
 });
 
 // ---- POST /arise/request { account, newPubKeyHash } ----
+// H3: enumeration-resistant. The response is identical whether or not the
+// account exists or has recovery, and nothing is displayed anywhere — the code
+// is only ever emailed to the bound address. A public code display would be an
+// account-takeover vector, which is why it does not exist.
+const ARISE_GENERIC = { message: "If this account has recovery enabled, a code has been sent." };
 app.post("/arise/request", async (req, res) => {
   try {
     const { account, newPubKeyHash } = req.body as { account: Hex; newPubKeyHash: Hex };
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const domain = `suho.arise:${account.toLowerCase()}:${newPubKeyHash.toLowerCase()}`;
-    const codeHash = keccak256(
-      encodePacked(["address", "string", "string"], [account, domain, code]),
-    );
-    const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);
-    const txHash = await relayerWallet.writeContract({
-      address: ADDR.suhoCodeAttester,
-      abi: suhoCodeAttesterAbi,
-      functionName: "issueCode",
-      args: [account, domain, codeHash, expiry],
-    });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
-    issuedCodes.set(`${account}:${newPubKeyHash}`, { expiresAt: Number(expiry) });
-    recordCode({ account, kind: "recovery", code, expiresAt: Number(expiry) });
+    if (!isAddr(account) || typeof newPubKeyHash !== "string") return res.json(ARISE_GENERIC);
 
-    // Offchain delivery: shown on the /issuer portal (and the console + codes.log
-    // as fallbacks). On mainnet this is the issuer's own app.
-    printCodeBanner("RECOVERY", account, code);
-    res.json({ ok: true, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
+    const rec = await getRecovery(account);
+    if (rec) {
+      const [byAcct, byEmail] = await Promise.all([
+        countRecentEmailEvents({ address: account, kind: "arise", windowMs: HOUR }),
+        countRecentEmailEvents({ emailHashHex: rec.hash, kind: "arise", windowMs: HOUR }),
+      ]);
+      if (byAcct < ARISE_MAX_PER_HOUR && byEmail < ARISE_MAX_PER_HOUR) {
+        const code = sixDigit();
+        const domain = `suho.arise:${account.toLowerCase()}:${newPubKeyHash.toLowerCase()}`;
+        const codeHash = keccak256(encodePacked(["address", "string", "string"], [account, domain, code]));
+        const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);
+        const txHash = await relayerWallet.writeContract({
+          address: ADDR.suhoCodeAttester,
+          abi: suhoCodeAttesterAbi,
+          functionName: "issueCode",
+          args: [account, domain, codeHash, expiry],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        issuedCodes.set(`${account}:${newPubKeyHash}`, { expiresAt: Number(expiry) });
+        await sendAriseCode(decryptEmail(rec.encrypted), code, account, 10);
+        await recordEmailEvent(account, rec.hash, "arise");
+        await audit("arise.request.sent", account);
+      } else {
+        await audit("arise.request.ratelimited", account);
+      }
+    }
+    // Always identical, even on rate-limit or no recovery. No enumeration.
+    res.json(ARISE_GENERIC);
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    noteError("arise/request", e);
+    // Even on internal error, do not leak — same generic response.
+    res.json(ARISE_GENERIC);
   }
 });
 
@@ -809,12 +842,224 @@ app.post("/arise/complete", async (req, res) => {
   }
 });
 
+// ======================= Phase H: real recovery delivery =======================
+const HOUR = 3_600_000;
+const CONFIRM_MAX_PER_HOUR = Number(process.env.SUHO_EMAIL_CONFIRM_MAX_PER_HOUR ?? "5");
+const ARISE_MAX_PER_HOUR = Number(process.env.SUHO_ARISE_EMAIL_MAX_PER_HOUR ?? "3");
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const sixDigit = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
+const maskEmail = (e: string) => {
+  const [l, d] = e.split("@");
+  return `${l?.[0] ?? ""}•••@${d ?? ""}`;
+};
+const isAddr = (a: unknown): a is Hex => typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a);
+
+// Pending email-confirmation codes (transient, in memory). The DB records what
+// is BOUND; this holds only the unconfirmed code.
+const pendingConfirm = new Map<string, { email: string; code: string; expiresAt: number }>();
+
+// Passkey-gate challenges (in memory), keyed by `${purpose}:${account}`.
+const gateChallenges = new Map<string, { challenge: Hex; expiresAt: number }>();
+function issueGate(purpose: string, account: string): Hex {
+  const challenge = `0x${randomBytes(32).toString("hex")}` as Hex;
+  gateChallenges.set(`${purpose}:${account.toLowerCase()}`, { challenge, expiresAt: Date.now() + 5 * 60_000 });
+  return challenge;
+}
+// Verify a passkey assertion over the issued challenge against the account's
+// on-chain P-256 key — proves the caller controls the account.
+async function passGate(purpose: string, account: Hex, webauthn: BrowserAssertion): Promise<boolean> {
+  const key = `${purpose}:${account.toLowerCase()}`;
+  const c = gateChallenges.get(key);
+  if (!c || c.expiresAt < Date.now()) return false;
+  let x: Hex, y: Hex;
+  try {
+    // read-twice: a fresh account's passkey can read stale/empty on a
+    // load-balanced node right after onboarding.
+    [x, y] = (await readTwice(() =>
+      publicClient.readContract({ address: account, abi: ondolAccountAbi, functionName: "passkey" }),
+    )) as [Hex, Hex];
+  } catch {
+    return false;
+  }
+  const ok = await verifyAssertion({ x, y }, c.challenge, webauthn);
+  if (ok) gateChallenges.delete(key);
+  return ok;
+}
+
+// ---- GET /recovery/challenge?account= ----
+app.get("/recovery/challenge", (req, res) => {
+  const account = String(req.query.account ?? "");
+  if (!isAddr(account)) return res.status(400).json({ error: "invalid account" });
+  res.json({ challenge: issueGate("recovery", account), expiresAt: Date.now() + 5 * 60_000 });
+});
+
+// ---- POST /recovery/request-code { account, email, webauthn } ----
+// Passkey-gated: only the account controller may set its recovery email.
+// Without it an attacker could bind their own email and then recover the account
+// — a full takeover vector. Sends a 6-digit confirmation code to the email; on a
+// change (an existing different binding) it also notices the old address.
+app.post("/recovery/request-code", async (req, res) => {
+  try {
+    const { account, email, webauthn } = req.body as {
+      account: Hex;
+      email: string;
+      webauthn: BrowserAssertion;
+    };
+    if (!isAddr(account)) return res.status(400).json({ error: "invalid account" });
+    if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+      return res.status(400).json({ error: "invalid email" });
+    }
+    if (!(await passGate("recovery", account, webauthn))) {
+      return res.status(401).json({ error: "PasskeyRequired" });
+    }
+    const eh = emailHash(email);
+    const [byAcct, byEmail] = await Promise.all([
+      countRecentEmailEvents({ address: account, kind: "confirm", windowMs: HOUR }),
+      countRecentEmailEvents({ emailHashHex: eh, kind: "confirm", windowMs: HOUR }),
+    ]);
+    if (byAcct >= CONFIRM_MAX_PER_HOUR || byEmail >= CONFIRM_MAX_PER_HOUR) {
+      return res.status(429).json({ error: "RateLimited" });
+    }
+    const code = sixDigit();
+    pendingConfirm.set(account.toLowerCase(), {
+      email: email.trim(),
+      code,
+      expiresAt: Date.now() + 10 * 60_000,
+    });
+    await sendConfirmationCode(email.trim(), code);
+    await recordEmailEvent(account, eh, "confirm");
+    const existing = await getRecovery(account);
+    if (existing && existing.hash !== eh) {
+      try {
+        await sendEmailChangeNotice(decryptEmail(existing.encrypted));
+      } catch (e) {
+        noteError("recovery/change-notice", e);
+      }
+    }
+    await audit("recovery.request-code", account);
+    res.json({ ok: true });
+  } catch (e) {
+    noteError("recovery/request-code", e);
+    res.status(500).json({ error: "could not send the confirmation code" });
+  }
+});
+
+// ---- POST /recovery/confirm { account, email, code } ----
+// The code proves email control; request-code already proved account control.
+app.post("/recovery/confirm", async (req, res) => {
+  try {
+    const { account, email, code } = req.body as { account: Hex; email: string; code: string };
+    if (!isAddr(account)) return res.status(400).json({ error: "invalid account" });
+    const p = pendingConfirm.get(account.toLowerCase());
+    if (
+      !p ||
+      p.expiresAt < Date.now() ||
+      p.code !== String(code) ||
+      p.email.toLowerCase() !== String(email ?? "").trim().toLowerCase()
+    ) {
+      return res.status(400).json({ error: "CodeInvalid" });
+    }
+    await bindRecoveryEmail(account, p.email);
+    pendingConfirm.delete(account.toLowerCase());
+    await audit("recovery.bound", account);
+    res.json({ ok: true });
+  } catch (e) {
+    noteError("recovery/confirm", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ---- GET /recovery?account= (on/off + masked email) ----
+app.get("/recovery", async (req, res) => {
+  try {
+    const account = String(req.query.account ?? "");
+    if (!isAddr(account)) return res.status(400).json({ error: "invalid account" });
+    const rec = await getRecovery(account);
+    if (!rec) return res.json({ enabled: false });
+    res.json({ enabled: true, maskedEmail: maskEmail(decryptEmail(rec.encrypted)) });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ---- GET /otp/challenge?account= ----
+app.get("/otp/challenge", (req, res) => {
+  const account = String(req.query.account ?? "");
+  if (!isAddr(account)) return res.status(400).json({ error: "invalid account" });
+  res.json({ challenge: issueGate("otp", account), expiresAt: Date.now() + 5 * 60_000 });
+});
+
+// ---- POST /otp/retrieve { account, recipient, value, webauthn } ----
+// H4: the transfer OTP is retrieved by proving passkey possession; the code is
+// returned to the app and shown only there. No public surface.
+app.post("/otp/retrieve", async (req, res) => {
+  try {
+    const { account, recipient, value, webauthn } = req.body as {
+      account: Hex;
+      recipient: Hex;
+      value: string;
+      webauthn: BrowserAssertion;
+    };
+    if (!isAddr(account) || !isAddr(recipient)) return res.status(400).json({ error: "invalid address" });
+    if (!(await passGate("otp", account, webauthn))) {
+      return res.status(401).json({ error: "PasskeyRequired" });
+    }
+    const code = sixDigit();
+    const domain = `suho.guard:${account.toLowerCase()}:${recipient.toLowerCase()}:${BigInt(value).toString()}`;
+    const codeHash = keccak256(encodePacked(["address", "string", "string"], [account, domain, code]));
+    const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);
+    const txHash = await relayerWallet.writeContract({
+      address: ADDR.suhoCodeAttester,
+      abi: suhoCodeAttesterAbi,
+      functionName: "issueCode",
+      args: [account, domain, codeHash, expiry],
+    });
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    issuedCodes.set(domain, { expiresAt: Number(expiry) });
+    await audit("otp.retrieved", account);
+    res.json({ code, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
+  } catch (e) {
+    noteError("otp/retrieve", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ---- GET /ops (bearer-gated; no codes, no emails, no secrets) ----
+app.get("/ops", async (req, res) => {
+  const token = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+  if (!process.env.SUHO_OPS_TOKEN || token !== process.env.SUHO_OPS_TOKEN) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  try {
+    rollOnboardDay();
+    const [bal, ops] = await Promise.all([relayerBalanceCached(0), recentOps(30)]);
+    res.json({
+      relayer: relayerAccount.address,
+      relayerBalanceWei: bal.toString(),
+      sponsoredOnboardsToday,
+      relaysServed,
+      lastError,
+      recentEmailEvents: ops.events,
+      recentAudit: ops.audit,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 // PORT from env for hosted deploys (Railway injects it); 8787 for local dev.
 const PORT = Number(process.env.PORT) || 8787;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`suho guardian on :${PORT} (chain ${giwaSepolia.id})`);
   console.log(`relayer/issuer: ${relayerAccount.address}`);
   console.log(`demo EOA:       ${aliceAccount.address}`);
   console.log(`CORS: ${CORS_ALLOW.includes("*") ? "open (*)" : CORS_ALLOW.join(", ")}`);
+  try {
+    await initDb();
+    await warmPool();
+    console.log("db: schema ready (pool warmed)");
+  } catch (e) {
+    console.log(`db: unavailable (recovery disabled) — ${String(e).slice(0, 80)}`);
+  }
   prewarmDirectory();
 });
