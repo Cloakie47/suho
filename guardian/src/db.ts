@@ -9,7 +9,11 @@ import { encryptEmail, emailHash } from "./crypto.js";
 let pool: pg.Pool | null = null;
 function db(): pg.Pool {
   if (pool) return pool;
-  const connectionString = process.env.DATABASE_URL;
+  // Railway's internal host (postgres.railway.internal) only resolves inside
+  // Railway. For local dev set DATABASE_PUBLIC_URL to the public proxy URL; it
+  // takes precedence when present. On Railway only DATABASE_URL (internal) is
+  // set, so the internal host is used there.
+  const connectionString = process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
   // Managed Postgres (Railway) terminates TLS; allow it without a local CA.
   const ssl = /localhost|127\.0\.0\.1/.test(connectionString) ? undefined : { rejectUnauthorized: false };
