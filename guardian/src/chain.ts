@@ -4,8 +4,13 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Keys live in the repo-root .env only; they are read here and never logged.
+// Env, never logged. guardian/.env holds the guardian's own config (Phase H:
+// DATABASE_URL, RESEND_*, SUHO_EMAIL_*, SUHO_OPS_TOKEN) and matches the Railway
+// service root; the repo-root .env holds the relayer/demo keys. Load both;
+// dotenv does not override already-set vars, so on Railway (no files) the
+// dashboard vars win. guardian/.env first so it takes precedence locally.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 export const giwaSepolia = defineChain({
