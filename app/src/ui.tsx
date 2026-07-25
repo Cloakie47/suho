@@ -9,6 +9,46 @@ export function Seal({ small, large }: { small?: boolean; large?: boolean }) {
   );
 }
 
+/** Success indicator = the dojang seal, pressed in like a stamp. Success and
+ *  "verified" share one visual language: this is the same seal as the verified
+ *  recipient mark, larger, with the press-in stamp animation on entry. Replaces
+ *  the old placeholder success checkmark. */
+export function SealStamp({ label = "Done" }: { label?: string }) {
+  return (
+    <div className="seal-stamp" role="img" aria-label={label}>
+      <span className="stamp-anim">
+        <span className="seal">수호</span>
+      </span>
+    </div>
+  );
+}
+
+/** A distinct success mark for places a full seal does not fit (a paired yes/no,
+ *  a compact row): a thin geometric check inside a seal-red circle, cleanly
+ *  drawn — not a hand-drawn glyph. */
+export function SuccessCheck({ size = 24 }: { size?: number }) {
+  return (
+    <svg
+      className="success-check"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label="Success"
+    >
+      <circle cx="12" cy="12" r="10.5" fill="none" stroke="var(--seal)" strokeWidth="1.5" />
+      <path
+        d="M7.5 12.4l3.1 3.1 5.9-6.4"
+        fill="none"
+        stroke="var(--seal)"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 
 export function Spinner() {
   return <span className="spinner" />;

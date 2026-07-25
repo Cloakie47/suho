@@ -15,7 +15,7 @@ import {
 } from "../config";
 import { createPasskey } from "../webauthn";
 import { humanError, isUserCancel } from "../errors";
-import { Seal, Spinner, shortAddr } from "../ui";
+import { Seal, SealStamp, Spinner, shortAddr } from "../ui";
 import { useToast } from "../toast";
 
 type Stage =
@@ -204,7 +204,7 @@ export function Onboard({
 
         {stage.k === "done" && (
           <div className="card center">
-            <div className="big-check">✓</div>
+            <SealStamp label="Account created" />
             <div className="hero">Your account exists.</div>
             <p className="muted">
               Not yet verified, balance 0. The guided steps on your home screen finish the setup.

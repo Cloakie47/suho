@@ -446,7 +446,15 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 @media (max-width: 1023px) { .upgrade-layout { grid-template-columns: 1fr; } }
 .center { text-align: center; }
 .hero { font-size: 1.25rem; font-weight: 600; font-family: var(--font-display); margin: 8px 0; }
-.big-check { font-size: 2.4rem; text-align: center; color: var(--jade); margin: 8px 0 4px; }
+/* success = the seal, stamped in (shares the verified visual language) */
+.seal-stamp { display: flex; justify-content: center; margin: 10px 0 8px; }
+.stamp-anim { display: inline-flex; animation: seal-stamp 320ms var(--ease) both; }
+.seal-stamp .seal {
+  min-width: 62px; height: 62px; font-size: 1.5rem;
+  border-width: 3px; border-radius: 12px;
+}
+/* distinct success mark where a full seal does not fit */
+.success-check { display: inline-block; vertical-align: middle; flex: none; }
 
 /* ================= toasts (L2) ================= */
 .toast-stack {
@@ -496,6 +504,7 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: toast-fade 200ms ease; }
   .toast-seal { animation: toast-fade 200ms ease; }
+  .stamp-anim { animation: none; }
     .card.hover:hover, .stat-card:hover { transform: none; }
   .vcard { transition: none; }
   .skeleton { animation: none; }

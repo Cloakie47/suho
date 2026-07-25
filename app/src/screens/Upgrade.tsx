@@ -4,7 +4,7 @@ import { createPasskey, relinkPasskey } from "../webauthn";
 import { accountPasskey } from "../chain";
 import { humanError, isUserCancel } from "../errors";
 import { DEMO_ACCOUNT, EXPLORER, isLegacyDemo, storedCredential, storeCredential } from "../config";
-import { Seal, Spinner, shortAddr } from "../ui";
+import { Seal, SealStamp, Spinner, shortAddr } from "../ui";
 import { useToast } from "../toast";
 
 /** R5: no screen is a single element in a void — success is a two-col
@@ -91,7 +91,7 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
         <div className="card" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
           {upgraded || result ? (
             <>
-              <div className="big-check">✓</div>
+              <SealStamp label="Upgraded" />
               <div className="hero center">Same address. Same name. New powers.</div>
               <p className="muted center" title="The original EOA key is no longer needed day to day.">
                 This address is now a smart account. Your passkey controls it.

@@ -5,7 +5,7 @@ import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chai
 import { capForAccount } from "../execute";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
 import { activeAccount, EXPLORER, GUARDIAN, storedCredential, storeCredential } from "../config";
-import { Spinner, shortAddr } from "../ui";
+import { SealStamp, SuccessCheck, Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { recordSend } from "../stats";
 import { humanError, isUserCancel } from "../errors";
@@ -257,7 +257,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
           {stage.k === "arisen" && (
             <>
               <div className="card center">
-                <div className="big-check">✓</div>
+                <SealStamp label="Recovered" />
                 <div className="hero">You have risen.</div>
                 <p className="muted">Same address and name, new key.</p>
                 <p className="mono muted">
@@ -297,7 +297,7 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
                   )}
                 </div>
                 <div className="card hover prove-card">
-                  <div className="prove-mark yes">✓</div>
+                  <div className="prove-mark yes"><SuccessCheck size={26} /></div>
                   <h2>New passkey</h2>
                   <p className="muted">Sends normally. Same address, new authority.</p>
                   <button
