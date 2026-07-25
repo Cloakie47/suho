@@ -8,6 +8,9 @@ export const GUARDIAN = import.meta.env.VITE_GUARDIAN_URL ?? "http://localhost:8
 export const DOCS_URL =
   import.meta.env.VITE_DOCS_URL ?? "http://localhost:8899/docs/overview/what-is-suho.html";
 export const GITHUB_URL = "https://github.com/Cloakie47/suho";
+// The landing page (a separate origin). The app wordmark links here as "home".
+// Dev: the local static server; prod: suhowallet.com. Env-configurable.
+export const LANDING_URL = import.meta.env.VITE_LANDING_URL ?? "http://localhost:8899/";
 export const CHAIN_ID = 91342n;
 export const NORMAL_RPC = "https://sepolia-rpc.giwa.io";
 export const FLASH_RPC = "https://sepolia-rpc-flashblocks.giwa.io";

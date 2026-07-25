@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   Upload,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { api, type Status } from "./api";
@@ -24,6 +25,7 @@ import {
   DEMO_ACCOUNT,
   DOCS_URL,
   GITHUB_URL,
+  LANDING_URL,
 } from "./config";
 import { accountPasskey, isOndolAccount } from "./chain";
 import { relinkPasskey } from "./webauthn";
@@ -361,7 +363,7 @@ function AccountSwitcher({
     </div>
   );
 }
-import { ErrNote, Seal, Spinner, fmtEth, shortAddr } from "./ui";
+import { ErrNote, GithubMark, Seal, Spinner, fmtEth, shortAddr } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
 import { Arise } from "./screens/Arise";
@@ -555,9 +557,9 @@ export default function App() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="wordmark">
+        <a className="wordmark wordmark-home" href={LANDING_URL} title="Home — suho.wallet">
           Suho<span className="hanja">수호</span>
-        </div>
+        </a>
         {status && <IdentityCard status={status} onOpen={() => setSwitcherOpen(true)} />}
         <nav className="nav" aria-label="Screens">
           {NAV.map((n) => (
@@ -573,19 +575,19 @@ export default function App() {
         </nav>
         <div className="side-foot">
           <a className="side-link" href={DOCS_URL} target="_blank" rel="noreferrer">
-            Docs
+            <BookOpen size={14} strokeWidth={1.75} /> Docs
           </a>
           <a className="side-link" href={GITHUB_URL} target="_blank" rel="noreferrer">
-            GitHub
+            <GithubMark size={14} /> GitHub
           </a>
         </div>
       </aside>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="topbar-m">
-          <div className="wordmark" style={{ padding: 0 }}>
+          <a className="wordmark wordmark-home" style={{ padding: 0 }} href={LANDING_URL} title="Home">
             Suho<span className="hanja">수호</span>
-          </div>
+          </a>
           {status && (
             <button
               className="bal"

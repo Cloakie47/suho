@@ -165,19 +165,21 @@ function ActivityFeed({ bump }: { bump: number }) {
 }
 
 /** R5: OTP interstitial as an L2 modal — 6 code boxes, countdown ring. */
+/** Transfer OTP interstitial. The code is retrieved passkey-gated (the sender
+ *  holds their passkey) and shown here as a read-only confirmation — there is
+ *  nothing to type, so no input fields (which is also why the browser's
+ *  "paste one-time code" prompt no longer appears). One confirm action sends. */
 function OtpModal({
   expiresAt,
-  value,
-  onChange,
-  onSubmit,
+  code,
+  onConfirm,
   onRequestNew,
   onClose,
   busy,
 }: {
   expiresAt: number;
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
+  code: string;
+  onConfirm: () => void;
   onRequestNew: () => void;
   onClose: () => void;
   busy: boolean;
@@ -185,7 +187,6 @@ function OtpModal({
   const [countdown, setCountdown] = useState(() =>
     Math.max(0, expiresAt - Math.floor(Date.now() / 1000)),
   );
-  const boxes = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     const t = window.setInterval(
@@ -195,18 +196,9 @@ function OtpModal({
     return () => window.clearInterval(t);
   }, [expiresAt]);
 
-  useEffect(() => {
-    boxes.current[Math.min(value.length, 5)]?.focus();
-  }, [value.length]);
-
   const CIRC = 2 * Math.PI * 18;
   const frac = Math.min(1, countdown / 600);
-
-  const setDigit = (i: number, d: string) => {
-    const chars = value.split("");
-    chars[i] = d;
-    onChange(chars.join("").replace(/\D/g, "").slice(0, 6));
-  };
+  const expired = countdown <= 0;
 
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Verification required">
@@ -234,41 +226,25 @@ function OtpModal({
         </div>
         <p className="muted" style={{ margin: "6px 0 0" }}>
           This one-time code authorizes <b>this exact transfer</b> — this recipient, this amount.
-          It was retrieved with your passkey and is shown only here.
+          It was retrieved with your passkey. Nothing to type — just confirm.
         </p>
-        <div className="code-boxes">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <input
-              key={i}
-              ref={(el) => (boxes.current[i] = el)}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={value[i] ?? ""}
-              aria-label={`Code digit ${i + 1}`}
-              onChange={(e) => setDigit(i, e.target.value.replace(/\D/g, ""))}
-              onKeyDown={(e) => {
-                if (e.key === "Backspace" && !value[i]) {
-                  onChange(value.slice(0, Math.max(0, i - 1)));
-                }
-              }}
-            />
+        <div className="code-show" role="img" aria-label={`Verification code ${code.split("").join(" ")}`}>
+          {code.split("").map((d, i) => (
+            <span key={i} className="code-cell">
+              {d}
+            </span>
           ))}
         </div>
         <div className="countdown">
-          {countdown > 0 ? "single-use · bound to this exact transfer" : "This code has expired."}
+          {expired ? "This code has expired." : "single-use · bound to this exact transfer"}
         </div>
-        {countdown > 0 ? (
-          <button
-            className="primary wide"
-            disabled={value.length !== 6 || busy}
-            onClick={onSubmit}
-          >
-            Verify & send
-          </button>
-        ) : (
+        {expired ? (
           <button className="primary wide" disabled={busy} onClick={onRequestNew}>
             Request a new code
+          </button>
+        ) : (
+          <button className="primary wide" disabled={busy} onClick={onConfirm}>
+            {busy ? "Sending…" : "Confirm & send"}
           </button>
         )}
         <button className="secondary" onClick={onClose}>
@@ -553,9 +529,8 @@ export function Send({
       {phase.k === "otp" && (
         <OtpModal
           expiresAt={phase.expiresAt}
-          value={otpValue}
-          onChange={setOtpValue}
-          onSubmit={() => doSend(otpValue)}
+          code={otpValue}
+          onConfirm={() => doSend(otpValue)}
           onRequestNew={requestNewCode}
           onClose={() => setPhase({ k: "idle" })}
           busy={busy}

@@ -83,6 +83,12 @@ a:hover { text-decoration: underline; }
 }
 .wordmark { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; padding: 0 6px 18px; }
 .wordmark .hanja { color: var(--seal-deep); font-size: 0.85em; margin-left: 7px; }
+/* the wordmark is the way home (to the landing) */
+.wordmark-home {
+  display: inline-block; text-decoration: none; color: var(--ink); cursor: pointer;
+  transition: color 160ms var(--ease); border-radius: 6px;
+}
+.wordmark-home:hover { color: var(--seal-deep); }
 
 .id-card {
   background: var(--hanji-raised);
@@ -119,7 +125,6 @@ a:hover { text-decoration: underline; }
 }
 .nav-item svg { flex: none; }
 
-.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 6px; }
 .net-pill {
   display: inline-flex; align-items: center; gap: 8px;
   border: 1px solid var(--line-strong); border-radius: 999px;
@@ -330,10 +335,14 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
   position: absolute; inset: 0; display: grid; place-items: center;
   font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-dim);
 }
-.code-boxes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 18px 0 4px; }
-.code-boxes input {
-  text-align: center; font-family: var(--font-mono); font-size: 1.3rem;
+/* read-only code display (transfer OTP is retrieved, not typed) */
+.code-show { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 18px 0 4px; }
+.code-cell {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 1.4rem; color: var(--ink);
   padding: 12px 0; background: #ffffff;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  user-select: all;
 }
 
 /* ================= directory (R5) ================= */
@@ -567,12 +576,19 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
   border: 1px solid rgba(138, 90, 27, 0.3); border-radius: 10px;
   padding: 9px 14px; margin-bottom: 18px; font-size: 0.88rem;
 }
-/* quiet Docs + GitHub links in the sidebar footer (pills retired) */
-.side-foot { margin-top: auto; padding: 0 6px; display: flex; gap: 18px; align-items: center; }
+/* sidebar footer: Docs + GitHub as deliberate nav, anchored by a hairline */
+.side-foot {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding: 14px 8px 2px;
+  display: flex; gap: 22px; align-items: center;
+}
 .side-link {
   display: inline-flex; align-items: center; gap: 6px;
   color: var(--ink-dim); font-size: 0.82rem; text-decoration: none;
+  transition: color 160ms var(--ease);
 }
+.side-link svg { flex: none; }
 .side-link:hover { color: var(--seal-deep); }
 
 /* inline link-styled button (recovery change/cancel, etc.) */
