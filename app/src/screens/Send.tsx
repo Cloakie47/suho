@@ -12,9 +12,9 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { api, GuardianError, type Status } from "../api";
+import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
-import { capForAccount, signGateChallenge } from "../execute";
+import { capForAccount } from "../execute";
 import { assertWithPasskey } from "../webauthn";
 import { activeAccount, isLegacyDemo, storedCredential, OTP_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
@@ -38,7 +38,7 @@ type SendPhase =
   | { k: "idle" }
   | { k: "signing" }
   | { k: "inflight" }
-  | { k: "otp"; expiresAt: number }
+  | { k: "otp" } // confirm interstitial for a large unverified transfer
   | { k: "error"; message: string };
 
 const icon = { size: 14, strokeWidth: 1.5 } as const;
@@ -165,88 +165,48 @@ function ActivityFeed({ bump }: { bump: number }) {
 }
 
 /** R5: OTP interstitial as an L2 modal — 6 code boxes, countdown ring. */
-/** Transfer OTP interstitial. The code is retrieved passkey-gated (the sender
- *  holds their passkey) and shown here as a read-only confirmation — there is
- *  nothing to type, so no input fields (which is also why the browser's
- *  "paste one-time code" prompt no longer appears). One confirm action sends. */
+/** Guarded-transfer confirmation. A large transfer to an unverified address is
+ *  the one send that stops to confirm. There's no code to enter or read — the
+ *  guardian issues and applies the one-time code during relay — so this is a
+ *  single deliberate confirm, then one passkey prompt completes the send. */
 function OtpModal({
-  expiresAt,
-  code,
+  recipient,
+  amount,
   onConfirm,
-  onRequestNew,
   onClose,
   busy,
 }: {
-  expiresAt: number;
-  code: string;
+  recipient: string;
+  amount: string;
   onConfirm: () => void;
-  onRequestNew: () => void;
   onClose: () => void;
   busy: boolean;
 }) {
-  const [countdown, setCountdown] = useState(() =>
-    Math.max(0, expiresAt - Math.floor(Date.now() / 1000)),
-  );
-
-  useEffect(() => {
-    const t = window.setInterval(
-      () => setCountdown(Math.max(0, expiresAt - Math.floor(Date.now() / 1000))),
-      500,
-    );
-    return () => window.clearInterval(t);
-  }, [expiresAt]);
-
-  const CIRC = 2 * Math.PI * 18;
-  const frac = Math.min(1, countdown / 600);
-  const expired = countdown <= 0;
-
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Verification required">
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Confirm large transfer">
       <div className="l2 otp-modal">
         <div className="otp-head">
-          <div className="otp-ring" aria-hidden="true">
-            <svg width="44" height="44" viewBox="0 0 44 44">
-              <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(243,239,231,0.1)" strokeWidth="3" />
-              <circle
-                cx="22" cy="22" r="18" fill="none"
-                stroke={countdown > 60 ? "var(--jade)" : "var(--seal)"}
-                strokeWidth="3" strokeLinecap="round"
-                strokeDasharray={CIRC}
-                strokeDashoffset={CIRC * (1 - frac)}
-              />
-            </svg>
-            <span className="t">
-              {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}
-            </span>
-          </div>
+          <span className="otp-shield" aria-hidden="true">
+            <TriangleAlert size={26} color="var(--warn)" strokeWidth={1.75} />
+          </span>
           <div>
-            <h2 style={{ margin: 0 }}>Verification required</h2>
+            <h2 style={{ margin: 0 }}>Confirm this transfer</h2>
             <div className="muted">Large transfer to an unverified address.</div>
           </div>
         </div>
-        <p className="muted" style={{ margin: "6px 0 0" }}>
-          This one-time code authorizes <b>this exact transfer</b> — this recipient, this amount.
-          It was retrieved with your passkey. Nothing to type — just confirm.
+        <p className="muted" style={{ margin: "12px 0 0" }}>
+          You're sending <b>{amount} ETH</b> to <b className="mono">{recipient}</b> — an address Suho
+          can't identify. A one-time code guards this transfer; Suho applies it for you after you
+          approve with your passkey.
         </p>
-        <div className="code-show" role="img" aria-label={`Verification code ${code.split("").join(" ")}`}>
-          {code.split("").map((d, i) => (
-            <span key={i} className="code-cell">
-              {d}
-            </span>
-          ))}
-        </div>
-        <div className="countdown">
-          {expired ? "This code has expired." : "single-use · bound to this exact transfer"}
-        </div>
-        {expired ? (
-          <button className="primary wide" disabled={busy} onClick={onRequestNew}>
-            Request a new code
-          </button>
-        ) : (
-          <button className="primary wide" disabled={busy} onClick={onConfirm}>
-            {busy ? "Sending…" : "Confirm & send"}
-          </button>
-        )}
+        <button
+          className="primary wide"
+          disabled={busy}
+          onClick={onConfirm}
+          style={{ marginTop: 18 }}
+        >
+          {busy ? "Sending…" : "Confirm & send"}
+        </button>
         <button className="secondary" onClick={onClose}>
           Cancel
         </button>
@@ -269,7 +229,6 @@ export function Send({
   const [resolving, setResolving] = useState(false);
   const [amount, setAmount] = useState("");
   const [phase, setPhase] = useState<SendPhase>({ k: "idle" });
-  const [otpValue, setOtpValue] = useState("");
   const [verifiedNames, setVerifiedNames] = useState<number | null>(null);
   const [actBump, setActBump] = useState(0);
   const debounceRef = useRef<number>();
@@ -326,7 +285,7 @@ export function Send({
     }, 300);
   }, [input]);
 
-  const doSend = async (otpCode: string) => {
+  const doSend = async () => {
     if (!recipient || recipient.notFound) return;
     const credentialId = storedCredential();
     if (!credentialId) {
@@ -344,7 +303,16 @@ export function Send({
       setPhase({ k: "error", message: "Insufficient balance." });
       return;
     }
-    const fromOtp = phase.k === "otp" ? phase : null;
+    // Single-prompt guarded send: a large transfer to an unverified address shows
+    // a confirm interstitial first (a click, not a passkey prompt). On confirm,
+    // ONE passkey signature completes it — the guardian issues and applies the
+    // one-time code during relay, since the execute challenge doesn't cover it.
+    const needsOtp = !recipient.verified && value >= OTP_THRESHOLD_WEI;
+    if (needsOtp && phase.k !== "otp") {
+      setPhase({ k: "otp" });
+      return;
+    }
+    const fromOtp = phase.k === "otp";
     let handle: TxToast | null = null;
     try {
       setPhase({ k: "signing" });
@@ -354,16 +322,15 @@ export function Send({
         capForAccount(activeAccount()),
       ]);
       const challenge = computeChallenge(activeAccount(), nonce, calls, maxGasPayment);
-      const webauthn = await assertWithPasskey(credentialId, challenge);
+      const webauthn = await assertWithPasskey(credentialId, challenge); // the one prompt
       setPhase({ k: "inflight" });
-      // One toast per transaction; the verb matches the button that launched it.
       handle = toast.begin(`Sending ${amount} ETH to ${recipient.display}…`);
       const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
         activeAccount(),
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
-        otpCode,
+        "", // the guardian issues + applies the guard code when required
         webauthn,
         maxGasPayment?.toString(),
       );
@@ -374,66 +341,24 @@ export function Send({
       });
       recordSend(txHash, timing.preconfMs); // session stat cards + feed ms
       localStorage.setItem(LS_FIRST_SEND, "1"); // O5 checklist step 4
-      setOtpValue("");
       setPhase({ k: "idle" });
       setActBump((b) => b + 1);
       refresh();
     } catch (e) {
       if (isUserCancel(e)) {
-        // Passkey prompt canceled or timed out. Not an error: quietly return to
-        // the pre-prompt state (the OTP modal if we were in it, else idle).
+        // Passkey prompt canceled. Not an error: back to the confirm interstitial
+        // (if that's where we came from) or idle.
         handle?.dismiss();
-        setPhase(fromOtp ?? { k: "idle" });
+        setPhase(fromOtp ? { k: "otp" } : { k: "idle" });
         toast.note("Canceled.");
-      } else if (e instanceof GuardianError && e.message === "OtpRequired") {
-        handle?.dismiss(); // no toast — the interstitial IS the response (skill)
-        try {
-          // H4: retrieve the code passkey-gated (proves account control), then
-          // show it in the interstitial — no public portal.
-          const { challenge } = await api.otpChallenge(activeAccount());
-          const wa = await signGateChallenge(challenge);
-          const r = await api.otpRetrieve(activeAccount(), recipient.address, value.toString(), wa);
-          setOtpValue(r.code);
-          setPhase({ k: "otp", expiresAt: r.expiresAt });
-        } catch (e2) {
-          if (isUserCancel(e2)) {
-            setPhase(fromOtp ?? { k: "idle" });
-            toast.note("Canceled.");
-          } else {
-            (handle ?? toast.begin("Requesting code…")).error(e2);
-            setPhase(fromOtp ?? { k: "idle" });
-          }
-        }
       } else if (handle) {
         handle.error(e); // typed revert -> human sentence in the toast
-        setPhase(fromOtp ?? { k: "idle" }); // bad code: reopen the interstitial
+        setPhase({ k: "idle" });
       } else {
         // pre-relay failure with no toast yet: carry it through one
         (toast.begin(`Sending ${amount} ETH to ${recipient.display}…`)).error(e);
         setPhase({ k: "idle" });
       }
-    }
-  };
-
-  // Task 3 item 3: countdown hit zero. Re-issue a fresh code for the same
-  // transfer and reset the modal timer, without leaving the interstitial.
-  const requestNewCode = async () => {
-    if (!recipient || recipient.notFound) return;
-    let v: bigint;
-    try {
-      v = parseEther(amount);
-    } catch {
-      return;
-    }
-    try {
-      const { challenge } = await api.otpChallenge(activeAccount());
-      const wa = await signGateChallenge(challenge);
-      const r = await api.otpRetrieve(activeAccount(), recipient.address, v.toString(), wa);
-      setOtpValue(r.code);
-      setPhase({ k: "otp", expiresAt: r.expiresAt });
-    } catch (e) {
-      if (isUserCancel(e)) toast.note("Canceled.");
-      else toast.begin("Requesting a new code…").error(e);
     }
   };
 
@@ -471,7 +396,7 @@ export function Send({
           <button
             className="primary"
             disabled={!recipient || recipient.notFound || !amount || busy}
-            onClick={() => doSend("")}
+            onClick={() => doSend()}
           >
             Send
           </button>
@@ -526,12 +451,11 @@ export function Send({
       {/* R2 row 3: real activity feed */}
       <ActivityFeed bump={actBump} />
 
-      {phase.k === "otp" && (
+      {phase.k === "otp" && recipient && (
         <OtpModal
-          expiresAt={phase.expiresAt}
-          code={otpValue}
-          onConfirm={() => doSend(otpValue)}
-          onRequestNew={requestNewCode}
+          recipient={recipient.display}
+          amount={amount}
+          onConfirm={() => doSend()}
           onClose={() => setPhase({ k: "idle" })}
           busy={busy}
         />

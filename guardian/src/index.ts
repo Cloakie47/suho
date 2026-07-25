@@ -431,59 +431,65 @@ app.post("/relay", async (req, res) => {
 
     // Proxy-fronted (V3) accounts use the capped 4-arg execute; legacy V1/V2 use
     // the 3-arg execute. The client signs the matching challenge, so the shape is
-    // driven by whether it sent a maxGasPayment. Each branch is fully typed.
-    const preflight = async (fn: () => Promise<unknown>): Promise<string | null> => {
-      // returns a typed-error name to refuse with (no gas), or null to proceed
-      try {
-        await fn();
-        return null;
-      } catch (e) {
-        const name = revertName(e);
-        if (name) return name;
-        throw e;
+    // driven by whether it sent a maxGasPayment. preflight eth_calls first (no gas
+    // on a doomed tx); the retry after auto-issuing a code skips it (the code was
+    // just written and a stale node could still report OtpRequired).
+    const isV3 = maxGasPayment !== undefined && maxGasPayment !== null;
+    const submitExecute = async (otp: string, preflightFirst = true): Promise<{ txHash?: Hex; refused?: string }> => {
+      if (isV3) {
+        const args = [encodedCalls, otp, BigInt(maxGasPayment), sig] as const;
+        if (preflightFirst) {
+          try {
+            await publicClient.simulateContract({ account: relayerAccount.address, address: account, abi: ondolV3Abi, functionName: "execute", args });
+          } catch (e) {
+            const name = revertName(e);
+            if (name) return { refused: name };
+            throw e;
+          }
+        }
+        return { txHash: await relayerWallet.writeContract({ address: account, abi: ondolV3Abi, functionName: "execute", args }) };
       }
+      const args = [encodedCalls, otp, sig] as const;
+      if (preflightFirst) {
+        try {
+          await publicClient.simulateContract({ account: relayerAccount.address, address: account, abi: ondolAccountAbi, functionName: "execute", args });
+        } catch (e) {
+          const name = revertName(e);
+          if (name) return { refused: name };
+          throw e;
+        }
+      }
+      return { txHash: await relayerWallet.writeContract({ address: account, abi: ondolAccountAbi, functionName: "execute", args }) };
     };
 
-    let txHash: Hex;
-    if (maxGasPayment !== undefined && maxGasPayment !== null) {
-      const args = [encodedCalls, otpCode ?? "", BigInt(maxGasPayment), sig] as const;
-      const refused = await preflight(() =>
-        publicClient.simulateContract({
-          account: relayerAccount.address,
-          address: account,
-          abi: ondolV3Abi,
-          functionName: "execute",
-          args,
-        }),
-      );
-      if (refused) return res.status(400).json({ error: refused });
-      txHash = await relayerWallet.writeContract({
-        address: account,
-        abi: ondolV3Abi,
-        functionName: "execute",
-        args,
+    let result = await submitExecute(otpCode ?? "");
+
+    // Single-prompt guarded send: the guard wants a one-time code, and the
+    // passkey signature is already proven valid (the preflight reached the guard,
+    // not InvalidPasskeySignature). The execute challenge does not cover otpCode,
+    // so the same signature stays valid — issue the code bound to this exact
+    // transfer and submit with it. The code never leaves the guardian.
+    if (result.refused === "OtpRequired" && encodedCalls.length >= 1) {
+      const t = encodedCalls[0];
+      const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      const domain = `suho.guard:${account.toLowerCase()}:${t.target.toLowerCase()}:${t.value.toString()}`;
+      const codeHash = keccak256(encodePacked(["address", "string", "string"], [account, domain, code]));
+      const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);
+      const issueTx = await relayerWallet.writeContract({
+        address: ADDR.suhoCodeAttester,
+        abi: suhoCodeAttesterAbi,
+        functionName: "issueCode",
+        args: [account, domain, codeHash, expiry],
       });
-    } else {
-      const args = [encodedCalls, otpCode ?? "", sig] as const;
-      const refused = await preflight(() =>
-        publicClient.simulateContract({
-          account: relayerAccount.address,
-          address: account,
-          abi: ondolAccountAbi,
-          functionName: "execute",
-          args,
-        }),
-      );
-      if (refused) return res.status(400).json({ error: refused });
-      txHash = await relayerWallet.writeContract({
-        address: account,
-        abi: ondolAccountAbi,
-        functionName: "execute",
-        args,
-      });
+      await publicClient.waitForTransactionReceipt({ hash: issueTx });
+      issuedCodes.set(domain, { expiresAt: Number(expiry) });
+      void audit("otp.auto-issued", account).catch(() => {});
+      result = await submitExecute(code, false);
     }
+
+    if (result.refused) return res.status(400).json({ error: result.refused });
     relaysServed++;
-    res.json({ txHash, explorer: explorerTx(txHash) }); // client watches Flashblocks
+    res.json({ txHash: result.txHash, explorer: explorerTx(result.txHash!) }); // client watches Flashblocks
   } catch (e) {
     // Surface the contract's typed error name (OtpRequired, CodeInvalid, ...)
     // so the app can branch — e.g. open the OTP interstitial.

@@ -335,14 +335,11 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
   position: absolute; inset: 0; display: grid; place-items: center;
   font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-dim);
 }
-/* read-only code display (transfer OTP is retrieved, not typed) */
-.code-show { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 18px 0 4px; }
-.code-cell {
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-mono); font-size: 1.4rem; color: var(--ink);
-  padding: 12px 0; background: #ffffff;
-  border: 1px solid var(--line-strong); border-radius: 10px;
-  user-select: all;
+/* guarded-transfer confirm: warn-tinted icon tile in the modal head */
+.otp-shield {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; flex: none;
+  background: var(--warn-bg); border-radius: 12px;
 }
 
 /* ================= directory (R5) ================= */
