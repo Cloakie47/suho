@@ -78,16 +78,25 @@ export const api = {
     ),
   fee: () =>
     req<{ maxGasPayment: string; gasPrice: string; l1UpperBound: string; eth: string }>("/fee"),
-  otpRequest: (account: Hex, recipient: Hex, value: string) =>
-    req<{ ok: boolean; expiresAt: number; attestationTx: string }>(
-      "/otp/request",
-      post({ account, recipient, value }),
+  // ---- H4: passkey-gated transfer OTP (retrieved, shown only in-app) ----
+  otpChallenge: (account: Hex) => req<{ challenge: Hex }>(`/otp/challenge?account=${account}`),
+  otpRetrieve: (account: Hex, recipient: Hex, value: string, webauthn: AssertionPayload) =>
+    req<{ code: string; expiresAt: number; attestationTx: string }>(
+      "/otp/retrieve",
+      post({ account, recipient, value, webauthn }),
     ),
+  // ---- H2: recovery binding ----
+  recoveryStatus: (account: Hex) =>
+    req<{ enabled: boolean; maskedEmail?: string }>(`/recovery?account=${account}`),
+  recoveryChallenge: (account: Hex) =>
+    req<{ challenge: Hex }>(`/recovery/challenge?account=${account}`),
+  recoveryRequestCode: (account: Hex, email: string, webauthn: AssertionPayload) =>
+    req<{ ok: boolean }>("/recovery/request-code", post({ account, email, webauthn })),
+  recoveryConfirm: (account: Hex, email: string, code: string) =>
+    req<{ ok: boolean }>("/recovery/confirm", post({ account, email, code })),
+  // ---- H3: enumeration-resistant arise (code arrives by email) ----
   ariseRequest: (account: Hex, newPubKeyHash: Hex) =>
-    req<{ ok: boolean; expiresAt: number; attestationTx: string }>(
-      "/arise/request",
-      post({ account, newPubKeyHash }),
-    ),
+    req<{ message: string }>("/arise/request", post({ account, newPubKeyHash })),
   ariseComplete: (account: Hex, newX: Hex, newY: Hex, code: string) =>
     req<{ status: string; txHash: Hex; explorer: string }>(
       "/arise/complete",

@@ -4,7 +4,7 @@ import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { capForAccount } from "../execute";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
-import { activeAccount, EXPLORER, GUARDIAN, storedCredential, storeCredential } from "../config";
+import { activeAccount, EXPLORER, storedCredential, storeCredential } from "../config";
 import { SealStamp, SuccessCheck, Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { recordSend } from "../stats";
@@ -73,14 +73,16 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   };
 
   const requestCode = async (key: PasskeyInfo) => {
-    setBusy("Requesting recovery code from the verification service…");
+    setBusy("Emailing a recovery code to your address on file…");
     try {
       const newPubKeyHash = keccak256(
         encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [key.x, key.y]),
       );
-      const r = await api.ariseRequest(activeAccount(), newPubKeyHash);
+      // H3: the response is generic (no enumeration); the code arrives by email.
+      // Soft client-side expiry (~10 min) mirrors the on-chain code lifetime.
+      await api.ariseRequest(activeAccount(), newPubKeyHash);
       setCode("");
-      setStage({ k: "code-sent", key, expiresAt: r.expiresAt });
+      setStage({ k: "code-sent", key, expiresAt: Math.floor(Date.now() / 1000) + 600 });
     } catch (e) {
       setStage({ k: "error", message: humanError(e).text });
     } finally {
@@ -210,11 +212,9 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
               {stage.k === "code-sent" && (
                 <>
                   <p className="muted">
-                    Read the 6-digit code from the{" "}
-                    <a href={`${GUARDIAN}/issuer`} target="_blank" rel="noreferrer">
-                      verification service
-                    </a>
-                    .
+                    If this account has recovery enabled, a 6-digit code is on its way to your
+                    recovery email. Enter it below. Nothing is shown here — the code only reaches
+                    the email you bound.
                   </p>
                   <input
                     type="text"

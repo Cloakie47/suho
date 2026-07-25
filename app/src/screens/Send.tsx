@@ -14,9 +14,9 @@ import {
 } from "lucide-react";
 import { api, GuardianError, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
-import { capForAccount } from "../execute";
+import { capForAccount, signGateChallenge } from "../execute";
 import { assertWithPasskey } from "../webauthn";
-import { activeAccount, isLegacyDemo, storedCredential, GUARDIAN, OTP_THRESHOLD_WEI } from "../config";
+import { activeAccount, isLegacyDemo, storedCredential, OTP_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
@@ -233,11 +233,8 @@ function OtpModal({
           </div>
         </div>
         <p className="muted" style={{ margin: "6px 0 0" }}>
-          Enter the code from the{" "}
-          <a href={`${GUARDIAN}/issuer`} target="_blank" rel="noreferrer">
-            verification service
-          </a>
-          .
+          This one-time code authorizes <b>this exact transfer</b> — this recipient, this amount.
+          It was retrieved with your passkey and is shown only here.
         </p>
         <div className="code-boxes">
           {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -415,12 +412,21 @@ export function Send({
       } else if (e instanceof GuardianError && e.message === "OtpRequired") {
         handle?.dismiss(); // no toast — the interstitial IS the response (skill)
         try {
-          const r = await api.otpRequest(activeAccount(), recipient.address, value.toString());
-          setOtpValue("");
+          // H4: retrieve the code passkey-gated (proves account control), then
+          // show it in the interstitial — no public portal.
+          const { challenge } = await api.otpChallenge(activeAccount());
+          const wa = await signGateChallenge(challenge);
+          const r = await api.otpRetrieve(activeAccount(), recipient.address, value.toString(), wa);
+          setOtpValue(r.code);
           setPhase({ k: "otp", expiresAt: r.expiresAt });
         } catch (e2) {
-          (handle ?? toast.begin("Requesting code…")).error(e2);
-          setPhase(fromOtp ?? { k: "idle" });
+          if (isUserCancel(e2)) {
+            setPhase(fromOtp ?? { k: "idle" });
+            toast.note("Canceled.");
+          } else {
+            (handle ?? toast.begin("Requesting code…")).error(e2);
+            setPhase(fromOtp ?? { k: "idle" });
+          }
         }
       } else if (handle) {
         handle.error(e); // typed revert -> human sentence in the toast
@@ -444,11 +450,14 @@ export function Send({
       return;
     }
     try {
-      const r = await api.otpRequest(activeAccount(), recipient.address, v.toString());
-      setOtpValue("");
+      const { challenge } = await api.otpChallenge(activeAccount());
+      const wa = await signGateChallenge(challenge);
+      const r = await api.otpRetrieve(activeAccount(), recipient.address, v.toString(), wa);
+      setOtpValue(r.code);
       setPhase({ k: "otp", expiresAt: r.expiresAt });
     } catch (e) {
-      toast.begin("Requesting a new code…").error(e);
+      if (isUserCancel(e)) toast.note("Canceled.");
+      else toast.begin("Requesting a new code…").error(e);
     }
   };
 

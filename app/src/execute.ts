@@ -1,8 +1,17 @@
 import type { Hex } from "viem";
 import { api } from "./api";
 import { accountNonce, computeChallenge, isUpgradeable, watchReceipt, type Call } from "./chain";
-import { assertWithPasskey } from "./webauthn";
+import { assertWithPasskey, type AssertionPayload } from "./webauthn";
 import { activeAccount, storedCredential } from "./config";
+
+/** Sign a guardian-issued gate challenge with this device's passkey. Proves
+ *  account control before the guardian reveals a code (H4) or binds recovery
+ *  (H2). Throws if no passkey is linked here. */
+export async function signGateChallenge(challenge: Hex): Promise<AssertionPayload> {
+  const credentialId = storedCredential();
+  if (!credentialId) throw new Error("No passkey linked on this device. Link it first.");
+  return assertWithPasskey(credentialId, challenge);
+}
 
 /** For a proxy-fronted (V3) account, fetch the guardian's recommended cap so it
  *  can be signed into the challenge; undefined for legacy V2 (uncapped 3-arg). */

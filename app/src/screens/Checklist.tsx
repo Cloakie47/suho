@@ -3,11 +3,11 @@ import QRCode from "qrcode";
 import { Check, Copy } from "lucide-react";
 import type { Hex } from "viem";
 import { api, type Status } from "../api";
-import { executeWithPasskey } from "../execute";
-import { activeAccount, GUARDIAN } from "../config";
+import { executeWithPasskey, signGateChallenge } from "../execute";
+import { activeAccount } from "../config";
 import { Seal, Spinner, fmtEth } from "../ui";
 import { useToast, type TxToast } from "../toast";
-import { isUserCancel } from "../errors";
+import { humanError, isUserCancel } from "../errors";
 
 export const LS_FIRST_SEND = "suho.firstSendDone";
 const LS_RECOVERY_NOTE = "suho.recoveryNoteDismissed";
@@ -25,17 +25,68 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
   );
   const toast = useToast();
 
+  // H2: recovery binding state.
+  const [recovery, setRecovery] = useState<{ enabled: boolean; maskedEmail?: string } | null>(null);
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [recPhase, setRecPhase] = useState<"idle" | "code-sent">("idle");
+  const [recBusy, setRecBusy] = useState<"send" | "confirm" | null>(null);
+  const [recErr, setRecErr] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
+
   const account = activeAccount();
   const funded = BigInt(status.balance) > 0n;
   const verified = status.isVerified;
   const named = status.upId !== null;
   const sent = localStorage.getItem(LS_FIRST_SEND) === "1";
-  const allDone = funded && verified && named && sent;
+  const recovered = recovery?.enabled === true;
+  const allDone = recovered && funded && verified && named && sent;
 
   useEffect(() => {
     QRCode.toDataURL(account, { margin: 1, width: 132, color: { dark: "#1b1917", light: "#ffffff" } })
       .then(setQr, () => setQr(null));
   }, [account]);
+
+  useEffect(() => {
+    let live = true;
+    api.recoveryStatus(account).then((r) => live && setRecovery(r), () => live && setRecovery({ enabled: false }));
+    return () => {
+      live = false;
+    };
+  }, [account]);
+
+  const enableRecovery = async () => {
+    setRecBusy("send");
+    setRecErr(null);
+    try {
+      const { challenge } = await api.recoveryChallenge(account);
+      const webauthn = await signGateChallenge(challenge); // passkey prompt
+      await api.recoveryRequestCode(account, email.trim(), webauthn);
+      setRecPhase("code-sent");
+    } catch (e) {
+      if (isUserCancel(e)) toast.note("Canceled.");
+      else setRecErr(humanError(e).text);
+    } finally {
+      setRecBusy(null);
+    }
+  };
+  const confirmRecovery = async () => {
+    setRecBusy("confirm");
+    setRecErr(null);
+    try {
+      await api.recoveryConfirm(account, email.trim(), code.trim());
+      setRecovery(await api.recoveryStatus(account));
+      setRecPhase("idle");
+      setChanging(false);
+      setCode("");
+      setEmail("");
+      toast.note("Recovery is on. Codes go to your email.");
+    } catch (e) {
+      setRecErr(humanError(e).text);
+    } finally {
+      setRecBusy(null);
+    }
+  };
 
   if (allDone) {
     if (noteDismissed) return null;
@@ -115,7 +166,90 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
       <h2>Finish setting up</h2>
       <div style={{ display: "grid", gap: 16 }}>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <StepMark done={funded} n={1} />
+          <StepMark done={recovered} n={1} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600 }}>Enable recovery</div>
+            {recovery === null ? (
+              <div className="status-line" style={{ margin: "4px 0" }}>
+                <Spinner /> checking…
+              </div>
+            ) : recovered && !changing ? (
+              <div className="muted">
+                Recovery is on. Codes go to <b>{recovery.maskedEmail}</b>.{" "}
+                <button
+                  className="linklike"
+                  onClick={() => {
+                    setChanging(true);
+                    setRecPhase("idle");
+                    setEmail("");
+                  }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : recPhase === "idle" ? (
+              <>
+                <div className="muted" style={{ margin: "4px 0" }}>
+                  {changing
+                    ? "Enter the new email. We'll confirm it and notify the old address."
+                    : "If you lose this device, a code sent to your email restores your account. Without it, this account cannot be recovered."}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="primary"
+                    disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || recBusy !== null}
+                    onClick={enableRecovery}
+                  >
+                    {recBusy === "send" ? "Confirm with your passkey…" : "Send code"}
+                  </button>
+                </div>
+                {changing && (
+                  <button className="linklike" style={{ marginTop: 6 }} onClick={() => setChanging(false)}>
+                    Cancel
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="muted" style={{ margin: "4px 0" }}>
+                  Enter the 6-digit code we emailed to <b>{email.trim()}</b>.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    style={{ flex: 1, fontFamily: "var(--font-mono)", letterSpacing: "0.3em" }}
+                  />
+                  <button
+                    className="primary"
+                    disabled={code.length !== 6 || recBusy !== null}
+                    onClick={confirmRecovery}
+                  >
+                    {recBusy === "confirm" ? "Confirming…" : "Confirm"}
+                  </button>
+                </div>
+                <button className="linklike" style={{ marginTop: 6 }} onClick={() => { setRecPhase("idle"); setCode(""); }}>
+                  Use a different email
+                </button>
+              </>
+            )}
+            {recErr && <div className="errbox" style={{ marginTop: 6 }}>{recErr}</div>}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <StepMark done={funded} n={2} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>Fund your account</div>
             {!funded ? (
@@ -146,7 +280,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
         </div>
 
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <StepMark done={verified} n={2} />
+          <StepMark done={verified} n={3} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>Get verified</div>
             {!verified ? (
@@ -171,7 +305,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
         </div>
 
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <StepMark done={named} n={3} />
+          <StepMark done={named} n={4} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>Claim your name</div>
             {!named ? (
@@ -207,7 +341,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
         </div>
 
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <StepMark done={sent} n={4} />
+          <StepMark done={sent} n={5} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>Send your first guarded transfer</div>
             <div className="muted" style={{ margin: "4px 0" }}>

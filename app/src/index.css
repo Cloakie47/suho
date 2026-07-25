@@ -575,6 +575,13 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 }
 .side-link:hover { color: var(--seal-deep); }
 
+/* inline link-styled button (recovery change/cancel, etc.) */
+.linklike {
+  background: none; border: 0; padding: 0; margin: 0; font: inherit;
+  color: var(--seal-deep); text-decoration: underline; cursor: pointer;
+}
+.linklike:hover { color: var(--seal); }
+
 /* neutral note toast (cancel etc.): gray, no seal, no rule accent */
 .toast.toast-note {
   border-left-color: var(--line-strong);
