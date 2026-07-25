@@ -1,17 +1,6 @@
+import "./env.js"; // load guardian/.env + root .env before anything reads process.env
 import { createPublicClient, createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import dotenv from "dotenv";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-// Env, never logged. guardian/.env holds the guardian's own config (Phase H:
-// DATABASE_URL, RESEND_*, SUHO_EMAIL_*, SUHO_OPS_TOKEN) and matches the Railway
-// service root; the repo-root .env holds the relayer/demo keys. Load both;
-// dotenv does not override already-set vars, so on Railway (no files) the
-// dashboard vars win. guardian/.env first so it takes precedence locally.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 export const giwaSepolia = defineChain({
   id: 91342,

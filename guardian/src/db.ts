@@ -1,3 +1,4 @@
+import "./env.js"; // ensure DATABASE_URL is loaded (db:init runs without index.ts)
 import pg from "pg";
 import { encryptEmail, emailHash } from "./crypto.js";
 
