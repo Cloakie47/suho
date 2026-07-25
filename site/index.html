@@ -18,6 +18,7 @@
     <div class="nav-links">
       <a class="nav-link" href="docs/overview/what-is-suho.html">Docs</a>
       <a class="nav-link" href="https://github.com/Cloakie47/suho" target="_blank" rel="noreferrer">GitHub</a>
+      <a class="btn-launch" href="http://localhost:5173/">Launch app</a>
     </div>
   </header>
 
@@ -28,8 +29,8 @@
         <h1>A wallet that guards&nbsp;you.</h1>
         <p class="sub">Start with nothing. No seed phrase, ever.</p>
         <div class="ctas">
-          <a class="btn btn-primary" href="#demo">Watch the demo</a>
-          <a class="btn btn-ghost" href="https://github.com/Cloakie47/suho">View the code</a>
+          <a class="btn btn-primary" href="http://localhost:5173/">Launch app</a>
+          <a class="btn btn-ghost" href="https://github.com/Cloakie47/suho" target="_blank" rel="noreferrer">View the code</a>
         </div>
       </div>
       <div class="hero-stage" id="stage" aria-hidden="true">
@@ -69,33 +70,29 @@
       <h2 class="reveal" style="--i:1">How Suho guards</h2>
       <div class="grid">
         <article class="gcard wide reveal" style="--i:0">
-          <img src="assets/shots/crop-onboard.png" alt="App screenshot: the onboarding screen offering 'Create your Suho account' with the red Suho seal" />
-          <div>
-            <h3>Start with nothing</h3>
-            <p>A fresh browser becomes a verified, named account. The key that starts it signs twice, then is destroyed.</p>
-            <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42">gasless onboarding · 0xf00b…ce42</a>
-          </div>
+          <h3>Start with nothing</h3>
+          <p>A fresh browser becomes a verified, named account. The key that starts it signs twice, then is destroyed — no seed phrase, no gas to begin.</p>
+          <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42">gasless onboarding · 0xf00b…ce42</a>
         </article>
         <article class="gcard reveal" style="--i:0">
-          <img src="assets/shots/crop-verified.png" alt="App screenshot: suho.up.id resolved with the red verification seal and the label 'Verified human'" />
-          <h3>Verified humans</h3>
-          <p>Recipients resolve by name. The seal marks verified humans only.</p>
+          <div class="gcard-head">
+            <span class="seal seal-card" lang="ko">수호</span>
+            <h3>Verified humans</h3>
+          </div>
+          <p>Recipients resolve by name, and the seal marks verified humans only — never a bare address.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/address/0xd5077b67dcb56caC8b270C7788FC3E6ee03F17B9">isVerified · DojangScroll 0xd507…17B9</a>
         </article>
         <article class="gcard reveal" style="--i:1">
-          <img src="assets/shots/crop-guard.png" alt="App screenshot: a large transfer to an unverified address showing the amber warning and a notice that a verification code will be required" />
           <h3>The Guard</h3>
-          <p>Large transfers to strangers stop for a one-time code. The code is bound to that exact transfer.</p>
+          <p>Large transfers to strangers stop for a one-time code, bound to that exact recipient and amount.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0x3c3fb31d608d984388cdadc37e81dcf9f631412542a1d83f6b3e67782ca24b03">OTP-gated send · 0x3c3f…4b03</a>
         </article>
         <article class="gcard reveal" style="--i:2">
-          <img src="assets/shots/crop-arise.png" alt="App screenshot: the Arise recovery screen asking 'Lost your device?'" />
           <h3>Arise</h3>
-          <p>A lost device is one code away from a new passkey. Same address, same name.</p>
+          <p>A lost device is one code away from a new passkey, sent to your recovery email. Same address, same name.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0x36770b1bc51c3b6972bb50b5b5d36b65e52121867fc8e1f90d4f254e85676bc3">arise() · 0x3677…6bc3</a>
         </article>
         <article class="gcard reveal" style="--i:3">
-          <img src="assets/shots/crop-card.png" alt="App screenshot: the Suho identity card with seal, up.id name, QR code and version line" />
           <h3>The Card</h3>
           <p>An identity card attested by the account itself. Every version is passkey-signed.</p>
           <a class="fact" href="https://sepolia-explorer.giwa.io/tx/0x5cbfba2ea0e076948d6eeb411c349f47cb0b4fa91339cf3321098e1df08ab167">self-attested · 0x5cbf…b167</a>
@@ -179,10 +176,12 @@
   </main>
 
   <!-- 6 · FOOTER -->
-  <footer id="demo">
-    <p class="demo-note">Demo video: coming soon.</p>
+  <footer>
+    <a class="btn btn-primary" href="http://localhost:5173/">Launch app</a>
     <nav class="foot-links">
-      <a href="https://github.com/Cloakie47/suho">GitHub</a>
+      <a href="docs/overview/what-is-suho.html">Docs</a>
+      <span aria-hidden="true">·</span>
+      <a href="https://github.com/Cloakie47/suho" target="_blank" rel="noreferrer">GitHub</a>
       <span aria-hidden="true">·</span>
       <a href="https://sepolia-explorer.giwa.io/address/0xacc2a6Eb741E147e8D3Ed9213b070656c908Adad">Explorer</a>
     </nav>
