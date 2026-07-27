@@ -7,7 +7,7 @@ The name is Korean. 수호 means to guard or protect. The visual language is Kor
 ## What it does
 
 - **Send to names.** Type a up.id name. Suho resolves it on chain and shows a red seal if the recipient is a verified human.
-- **Warn on strangers.** An unverified recipient shows an amber warning. Small sends still go through. Large sends stop for a code.
+- **Warn on strangers.** An unverified recipient shows an amber warning. Small sends still go through. Large sends stop for an explicit hold-to-confirm, then your passkey — no code, just deliberate friction plus the key that already authorizes the exact transfer.
 - **Recover with Arise.** Lost your device? Rotate to a new passkey with a single-use code. Your address and name stay the same.
 - **Carry a Card.** An attested identity card, signed by your own account, with a walkable version history on EAS.
 

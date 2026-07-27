@@ -327,20 +327,26 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
   backdrop-filter: blur(4px);
   display: grid; place-items: center; padding: 20px;
 }
-.otp-modal { width: 430px; max-width: 100%; padding: 26px; }
-.otp-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
-.otp-ring { position: relative; width: 44px; height: 44px; flex: none; }
-.otp-ring svg { transform: rotate(-90deg); }
-.otp-ring .t {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-dim);
-}
+.confirm-modal { width: 430px; max-width: 100%; padding: 26px; }
+.confirm-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
 /* guarded-transfer confirm: warn-tinted icon tile in the modal head */
-.otp-shield {
+.confirm-shield {
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px; flex: none;
   background: var(--warn-bg); border-radius: 12px;
 }
+/* hold-to-confirm: the button fills left-to-right as the user presses and holds.
+   No one-time code — this deliberate friction is the whole point. */
+.hold-confirm {
+  position: relative; overflow: hidden; width: 100%;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.hold-fill {
+  position: absolute; inset: 0; transform-origin: left center;
+  background: rgba(255, 255, 255, 0.22); pointer-events: none;
+  transition: transform 40ms linear;
+}
+.hold-label { position: relative; z-index: 1; }
 
 /* ================= directory (R5) ================= */
 .dir-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }

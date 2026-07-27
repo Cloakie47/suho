@@ -14,9 +14,9 @@ feature fires on that same account.
 2. A second browser tab at the **Verification Service**,
    `http://localhost:8787/issuer`. Same hanji theme as the app, titled
    "Verification Service (testnet issuer, simulated)". Codes appear here live
-   with a countdown the moment they are issued. The app links to it from the
-   OTP and Arise screens, so you can open it on cue. (Fallback if the page is
-   flaky: `Get-Content -Wait guardian\codes.log`.)
+   with a countdown the moment they are issued. Recovery codes now go to email;
+   the large-send act uses no code at all (hold-to-confirm + passkey). (Fallback
+   for recovery: check the recovery inbox.)
 Hidden but running: the guardian and vite terminals.
 
 **Explorer tabs pre-opened (sepolia-explorer.giwa.io):**
@@ -24,7 +24,7 @@ Hidden but running: the guardian and vite terminals.
   the `0xef0100…` code under the Contract tab is the money shot).
 - T2: an earlier `execute()` send tx opened on its **Internal Transactions
   view** — this is where the actual ETH movement of a passkey send is visible
-  (e.g. the OTP send `0x3c3f…4b03`).
+  (e.g. an earlier passkey `execute()` send).
 - T3: the arise() tx `0x3677…6bc3`.
 
 **Services health check (do this FIRST, catch a dead service before the take):**
@@ -48,7 +48,7 @@ relay; a dead guardian shows as "Can't reach the guardian service" in the app.
 
 **Budget for the demo account (it spends only transfer values; gas is always
 the relayer's):** verify fee 0.001 + guarded send 0.0002 + warning send 0.0005
-+ OTP send 0.011 + two arise proof sends 0.0002 = **0.0129 ETH. Fund 0.015**
++ large hold-to-confirm send 0.011 + two arise proof sends 0.0002 = **0.0129 ETH. Fund 0.015**
 (GIWA faucet 0.005 + Nodit 0.01, or the stand-in wallet) → ~0.002 headroom.
 
 ---
@@ -96,18 +96,21 @@ Paste mallory `0xB53Af3C7a3338f7CfE8df3E3D63104C53B93B0B2`, amount **0.0005**
 *"Unverified address. Suho can't identify who this is."* Send anyway — small
 amounts warn, not block.
 
-## Act 4 — The Guard: OTP theater (1:40–2:20)
+## Act 4 — The Guard: a large send to a stranger (1:40–2:20)
 
-Same recipient, amount **0.011** → Send → a **white modal over the dimmed
-paper ground**: six code boxes and a jade countdown ring that turns red near
-expiry. The modal links to the **verification service**; switch to that tab
-(a code card slides in with its own countdown) and read the 6-digit code. Type
-it into the six boxes → Verify & send → success toast. *"The code is bound to
-THIS recipient and THIS amount, single-use, delivered out-of-band. A drainer in
-the browser can't produce it."*
+Same recipient, amount **0.011** → Send → a **white modal over the dimmed paper
+ground**: a warning tile and a **hold-to-confirm** button that fills as you press
+and hold. Hold it, then complete the passkey prompt → success toast. *"A large
+send to an address Suho can't identify stops for a deliberate confirmation. Be
+honest about what protects you: it's your passkey — bound to THIS recipient and
+THIS amount — plus friction that stops a stray tap. There's no one-time code. We
+removed the code that used to sit here because the guardian minted it from the
+same passkey that signed the send, so it protected nothing while pretending to.
+A real, email-delivered second factor is planned as hardening, not shipped as
+theater."*
 
-**Fallbacks:** code expired (10 min) → send again for a fresh one; page flaky
-→ `codes.log`; wrong digit → toast says "That code didn't match" then retype.
+**Fallbacks:** passkey canceled → the modal returns; guard emits an
+`UnverifiedLargeSend` event you can point at on the explorer.
 
 ## Act 5 — Arise (2:20–3:00)
 

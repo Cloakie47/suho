@@ -56,8 +56,6 @@ import {
 import { sendConfirmationCode, sendAriseCode, sendEmailChangeNotice } from "./email.js";
 import { emailHash, decryptEmail } from "./crypto.js";
 import { randomInt, randomBytes } from "node:crypto";
-import { printCodeBanner } from "./banner.js";
-import { recordCode } from "./issuer.js";
 import { getDirectory, prewarmDirectory } from "./directory.js";
 import { getCard } from "./card.js";
 
@@ -431,9 +429,15 @@ app.post("/relay", async (req, res) => {
 
     // Proxy-fronted (V3) accounts use the capped 4-arg execute; legacy V1/V2 use
     // the 3-arg execute. The client signs the matching challenge, so the shape is
-    // driven by whether it sent a maxGasPayment. preflight eth_calls first (no gas
-    // on a doomed tx); the retry after auto-issuing a code skips it (the code was
-    // just written and a stale node could still report OtpRequired).
+    // driven by whether it sent a maxGasPayment. preflight eth_calls first so a
+    // doomed tx (bad sig, guard revert) never burns relayer gas.
+    //
+    // NOTE: the guardian mints NO transfer code. A large send to an unverified
+    // address is allowed by the on-chain guard on the account's passkey authority
+    // alone (the app forces an explicit hold-to-confirm first). The old auto-mint
+    // was removed — it satisfied the guard from the same passkey that signed the
+    // send, so it was security theater. `otpCode` is accepted for wire-compat but
+    // is always "" from the app and unused by the corrected guard.
     const isV3 = maxGasPayment !== undefined && maxGasPayment !== null;
     const submitExecute = async (otp: string, preflightFirst = true): Promise<{ txHash?: Hex; refused?: string }> => {
       if (isV3) {
@@ -462,31 +466,11 @@ app.post("/relay", async (req, res) => {
       return { txHash: await relayerWallet.writeContract({ address: account, abi: ondolAccountAbi, functionName: "execute", args }) };
     };
 
-    let result = await submitExecute(otpCode ?? "");
-
-    // Single-prompt guarded send: the guard wants a one-time code, and the
-    // passkey signature is already proven valid (the preflight reached the guard,
-    // not InvalidPasskeySignature). The execute challenge does not cover otpCode,
-    // so the same signature stays valid — issue the code bound to this exact
-    // transfer and submit with it. The code never leaves the guardian.
-    if (result.refused === "OtpRequired" && encodedCalls.length >= 1) {
-      const t = encodedCalls[0];
-      const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-      const domain = `suho.guard:${account.toLowerCase()}:${t.target.toLowerCase()}:${t.value.toString()}`;
-      const codeHash = keccak256(encodePacked(["address", "string", "string"], [account, domain, code]));
-      const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);
-      const issueTx = await relayerWallet.writeContract({
-        address: ADDR.suhoCodeAttester,
-        abi: suhoCodeAttesterAbi,
-        functionName: "issueCode",
-        args: [account, domain, codeHash, expiry],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: issueTx });
-      issuedCodes.set(domain, { expiresAt: Number(expiry) });
-      void audit("otp.auto-issued", account).catch(() => {});
-      result = await submitExecute(code, false);
-    }
-
+    // One passkey signature, one submission. If the preflight refuses (bad
+    // passkey sig, or a legacy account still on the old guard fail-closing a large
+    // unverified send), surface the typed error — the guardian never mints a code
+    // to paper over it.
+    const result = await submitExecute(otpCode ?? "");
     if (result.refused) return res.status(400).json({ error: result.refused });
     relaysServed++;
     res.json({ txHash: result.txHash, explorer: explorerTx(result.txHash!) }); // client watches Flashblocks
@@ -500,38 +484,13 @@ app.post("/relay", async (req, res) => {
   }
 });
 
-// ---- POST /otp/request { account, recipient, value } ----
-// Issues the guard OTP for a large transfer to an unverified recipient. Domain
-// must be byte-identical to OndolTransferGuard's construction: lowercase hex
-// addresses, decimal wei value.
-app.post("/otp/request", async (req, res) => {
-  try {
-    const { account, recipient, value } = req.body as {
-      account: Hex;
-      recipient: Hex;
-      value: string; // decimal wei
-    };
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const domain = `suho.guard:${account.toLowerCase()}:${recipient.toLowerCase()}:${BigInt(value).toString()}`;
-    const codeHash = keccak256(
-      encodePacked(["address", "string", "string"], [account, domain, code]),
-    );
-    const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);
-    const txHash = await relayerWallet.writeContract({
-      address: ADDR.suhoCodeAttester,
-      abi: suhoCodeAttesterAbi,
-      functionName: "issueCode",
-      args: [account, domain, codeHash, expiry],
-    });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
-    issuedCodes.set(domain, { expiresAt: Number(expiry) });
-    recordCode({ account, kind: "transfer", code, expiresAt: Number(expiry), recipient, valueWei: BigInt(value).toString() });
-    printCodeBanner("TRANSFER", recipient, code);
-    res.json({ ok: true, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
+// ---- Transfer OTP endpoints REMOVED (honest-guard correction) ----
+// /otp/request, /otp/challenge and /otp/retrieve are gone. A large send to an
+// unverified address is no longer gated by a guardian-minted code (that was
+// theater: the same passkey that signed the send caused the code to be minted).
+// The barrier is now the account's passkey signature bound to the exact
+// (recipient, value) plus the app's hold-to-confirm. Recovery/arise codes — a
+// genuinely out-of-band email factor — are unaffected and remain below.
 
 // ---- H5: the /issuer portal is RETIRED as a delivery channel ----
 // Recovery codes go to email; transfer codes are retrieved passkey-gated and
@@ -984,48 +943,6 @@ app.get("/recovery", async (req, res) => {
     if (!rec) return res.json({ enabled: false });
     res.json({ enabled: true, maskedEmail: maskEmail(decryptEmail(rec.encrypted)) });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-// ---- GET /otp/challenge?account= ----
-app.get("/otp/challenge", (req, res) => {
-  const account = String(req.query.account ?? "");
-  if (!isAddr(account)) return res.status(400).json({ error: "invalid account" });
-  res.json({ challenge: issueGate("otp", account), expiresAt: Date.now() + 5 * 60_000 });
-});
-
-// ---- POST /otp/retrieve { account, recipient, value, webauthn } ----
-// H4: the transfer OTP is retrieved by proving passkey possession; the code is
-// returned to the app and shown only there. No public surface.
-app.post("/otp/retrieve", async (req, res) => {
-  try {
-    const { account, recipient, value, webauthn } = req.body as {
-      account: Hex;
-      recipient: Hex;
-      value: string;
-      webauthn: BrowserAssertion;
-    };
-    if (!isAddr(account) || !isAddr(recipient)) return res.status(400).json({ error: "invalid address" });
-    if (!(await passGate("otp", account, webauthn))) {
-      return res.status(401).json({ error: "PasskeyRequired" });
-    }
-    const code = sixDigit();
-    const domain = `suho.guard:${account.toLowerCase()}:${recipient.toLowerCase()}:${BigInt(value).toString()}`;
-    const codeHash = keccak256(encodePacked(["address", "string", "string"], [account, domain, code]));
-    const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);
-    const txHash = await relayerWallet.writeContract({
-      address: ADDR.suhoCodeAttester,
-      abi: suhoCodeAttesterAbi,
-      functionName: "issueCode",
-      args: [account, domain, codeHash, expiry],
-    });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
-    issuedCodes.set(domain, { expiresAt: Number(expiry) });
-    await audit("otp.retrieved", account);
-    res.json({ code, expiresAt: Number(expiry), attestationTx: explorerTx(txHash) });
-  } catch (e) {
-    noteError("otp/retrieve", e);
     res.status(500).json({ error: String(e) });
   }
 });

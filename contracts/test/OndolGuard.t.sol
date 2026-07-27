@@ -23,10 +23,16 @@ contract MiniToken {
     }
 }
 
-/// @notice Spec §3.3 — guard policy exercised through the full account execution path.
+/// @notice Guard policy exercised through the full account execution path.
+///
+///         The honest model (post-audit correction): a large transfer to an
+///         unverified recipient is NOT gated by an independent one-time code. The
+///         only thing that can move funds is the account's passkey signature, which
+///         the account binds to the exact (recipient, value). These tests prove
+///         exactly that — the send needs a valid passkey and nothing else, the
+///         guard emits a loud `UnverifiedLargeSend`, and NO second-factor code is
+///         ever consumed (there is none to consume).
 contract OndolGuardTest is OndolTestBase {
-    string internal constant OTP = "728415";
-
     function test_verifiedRecipient_allowedWithoutWarning() public {
         vm.recordLogs();
         _execute(_ethTransfer(VERIFIED_RECIPIENT, 0.5 ether), "", PASSKEY_PK);
@@ -34,7 +40,8 @@ contract OndolGuardTest is OndolTestBase {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             assertTrue(
-                logs[i].topics[0] != OndolTransferGuard.UnverifiedRecipient.selector,
+                logs[i].topics[0] != OndolTransferGuard.UnverifiedRecipient.selector
+                    && logs[i].topics[0] != OndolTransferGuard.UnverifiedLargeSend.selector,
                 "verified recipient must not warn"
             );
         }
@@ -49,45 +56,50 @@ contract OndolGuardTest is OndolTestBase {
         assertEq(unverified.balance, amount, "small send must go through");
     }
 
-    function test_unverifiedLarge_withoutCode_revertsOtpRequired() public {
-        Call[] memory calls = _ethTransfer(unverified, OTP_THRESHOLD);
-        bytes memory sig = _signWebAuthn(PASSKEY_PK, _challenge(calls));
+    /// The core honest-behavior test: a large unverified send completes with a
+    /// valid passkey and NO code, emits UnverifiedLargeSend, and consumes no
+    /// second factor.
+    function test_unverifiedLarge_allowedByPasskey_emitsEvent_noCodeConsumed() public {
+        uint256 amount = 0.02 ether;
 
-        vm.prank(relayer);
-        vm.expectRevert(OndolTransferGuard.OtpRequired.selector);
-        OndolAccount(payable(account)).execute(calls, "", sig);
+        vm.recordLogs();
+        vm.expectEmit(true, true, false, true, address(guard));
+        emit OndolTransferGuard.UnverifiedLargeSend(account, unverified, amount);
+        _execute(_ethTransfer(unverified, amount), "", PASSKEY_PK);
+
+        assertEq(unverified.balance, amount, "large unverified send must go through on passkey authority");
+
+        // Prove no independent code was consumed: the attester never emitted a
+        // CodeConsumed (there was no code to consume).
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(
+                logs[i].topics[0] != SuhoCodeAttester.CodeConsumed.selector,
+                "no second-factor code may be consumed on the transfer path"
+            );
+        }
     }
 
-    function test_unverifiedLarge_withValidCode_succeedsAndConsumes() public {
+    /// The passkey is the ONLY gate: a large unverified send with a wrong passkey
+    /// reverts before any funds move.
+    function test_unverifiedLarge_withoutValidPasskey_reverts() public {
         uint256 amount = 0.02 ether;
-        _issueGuardOtp(unverified, amount, OTP);
-
-        _execute(_ethTransfer(unverified, amount), OTP, PASSKEY_PK);
-        assertEq(unverified.balance, amount);
-
-        // Single-use: the same code cannot authorize the same transfer again.
-        Call[] memory again = _ethTransfer(unverified, amount);
-        bytes memory sig = _signWebAuthn(PASSKEY_PK, _challenge(again));
-        vm.prank(relayer);
-        vm.expectRevert(SuhoCodeAttester.CodeAlreadyUsed.selector);
-        OndolAccount(payable(account)).execute(again, OTP, sig);
-    }
-
-    function test_otpBoundToDifferentRecipient_reverts() public {
-        uint256 amount = 0.02 ether;
-        address otherRecipient = makeAddr("other-recipient");
-        _issueGuardOtp(otherRecipient, amount, OTP); // code minted for someone else
-
-        // Guard derives the domain from the ACTUAL recipient, where no code is
-        // active — the observed code is useless for this transfer.
         Call[] memory calls = _ethTransfer(unverified, amount);
-        bytes memory sig = _signWebAuthn(PASSKEY_PK, _challenge(calls));
+        // Sign with a DIFFERENT passkey than the account's registered key.
+        bytes memory sig = _signWebAuthn(PASSKEY2_PK, _challenge(calls));
+
+        uint256 nonceBefore = OndolAccount(payable(account)).nonce();
         vm.prank(relayer);
-        vm.expectRevert(SuhoCodeAttester.CodeNotFound.selector);
-        OndolAccount(payable(account)).execute(calls, OTP, sig);
+        vm.expectRevert(OndolAccount.InvalidPasskeySignature.selector);
+        OndolAccount(payable(account)).execute(calls, "", sig);
+
+        assertEq(unverified.balance, 0, "no funds may move without a valid passkey");
+        assertEq(OndolAccount(payable(account)).nonce(), nonceBefore, "nonce must not advance on a rejected send");
     }
 
-    function test_erc20LargeTransferToUnverified_requiresOtp() public {
+    /// ERC-20 large transfer to an unverified recipient: allowed on passkey
+    /// authority, emits the honest event, no code consumed.
+    function test_unverifiedLarge_erc20_allowedByPasskey() public {
         MiniToken token = new MiniToken(account, 100 ether);
         uint256 amount = 1 ether; // raw token amount >= wei threshold (v1 semantics)
 
@@ -97,14 +109,11 @@ contract OndolGuardTest is OndolTestBase {
             value: 0,
             data: abi.encodeCall(MiniToken.transfer, (unverified, amount))
         });
-        bytes memory sig = _signWebAuthn(PASSKEY_PK, _challenge(calls));
-        vm.prank(relayer);
-        vm.expectRevert(OndolTransferGuard.OtpRequired.selector);
-        OndolAccount(payable(account)).execute(calls, "", sig);
 
-        // With the properly-bound code, the token transfer goes through.
-        _issueGuardOtp(unverified, amount, OTP);
-        _execute(calls, OTP, PASSKEY_PK);
-        assertEq(token.balanceOf(unverified), amount);
+        vm.expectEmit(true, true, false, true, address(guard));
+        emit OndolTransferGuard.UnverifiedLargeSend(account, unverified, amount);
+        _execute(calls, "", PASSKEY_PK);
+
+        assertEq(token.balanceOf(unverified), amount, "erc20 large unverified transfer must go through");
     }
 }

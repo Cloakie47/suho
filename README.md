@@ -3,8 +3,9 @@
 **A wallet that knows who you're paying.** Suho turns a Dojang-verified EOA on
 GIWA Sepolia into a passkey-secured smart account — same address, same up.id
 name — and puts verified identity at the center of every transfer: a dojang
-seal for verified humans, a warning for unknown addresses, a one-time code for
-large transfers to strangers, and code-based recovery when a device is lost.
+seal for verified humans, a warning for unknown addresses, a hold-to-confirm +
+passkey for large transfers to strangers, and code-based recovery when a device
+is lost.
 
 ## Architecture
 
@@ -20,9 +21,9 @@ large transfers to strangers, and code-based recovery when a device is lost.
 [GIWA Sepolia]  normal RPC for writes · Flashblocks RPC for reads/receipts
       │
       ├─ OndolAccount (EIP-7702 implementation; WebAuthn verify via P256VERIFY)
-      ├─ OndolTransferGuard (Dojang-verified recipients pass; strangers warn/OTP)
+      ├─ OndolTransferGuard (verified recipients pass; strangers warn; large sends: hold-to-confirm + passkey, no code)
       ├─ AriseModule (passkey rotation via purpose-bound one-time codes)
-      ├─ SuhoCodeAttester (EAS attestations for OTP/recovery codes)
+      ├─ SuhoCodeAttester (EAS attestations for recovery codes)
       └─ real Dojang / EAS / UpnameRegistry contracts (never mocked)
 ```
 

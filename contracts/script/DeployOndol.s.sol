@@ -52,8 +52,7 @@ contract DeployOndol is Script {
         OndolTransferGuard guard = new OndolTransferGuard(
             IDojangScroll(DojangConfig.DOJANG_SCROLL),
             DojangConfig.acceptedAttesterIds(),
-            OTP_THRESHOLD,
-            codes
+            OTP_THRESHOLD
         );
         AriseModule arise = new AriseModule(codes);
         OndolAccount accountImpl = new OndolAccount();

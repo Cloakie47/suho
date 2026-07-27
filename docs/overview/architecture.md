@@ -15,7 +15,7 @@ Suho has three parts. A browser app, a guardian service, and contracts on GIWA S
 [ GIWA Sepolia ]
    normal RPC for writes, Flashblocks RPC for reads and receipts
         ├─ OndolAccountV2   the smart account (EIP-7702 + passkeys)
-        ├─ OndolTransferGuard   verified pass, strangers warn or need a code
+        ├─ OndolTransferGuard   verified pass, strangers warn, large sends need hold-to-confirm + passkey
         ├─ AriseModule   passkey rotation via single-use codes
         ├─ SuhoCodeAttester   codes as EAS attestations
         └─ Dojang, EAS, UpnameRegistry   GIWA contracts, never mocked
@@ -29,7 +29,7 @@ The account challenge is `keccak256(account, chainId, nonce, calls)`. A signatur
 
 ## The guardian relays
 
-The guardian holds a relayer key that pays gas, and the issuer key that mints verification codes. It exposes a small REST surface: onboard, relay, request a code, verify-me, claim-name, status, directory, card, and the issuer portal.
+The guardian holds a relayer key that pays gas, and the issuer key that mints recovery codes (large transfers use no code — see [Send and the guard](/using/send)). It exposes a small REST surface: onboard, relay, recovery (email-gated), arise, verify-me, claim-name, status, directory, and card. The old public issuer portal is retired.
 
 The guardian never receives key material on any endpoint. A request-body check rejects anything key-shaped before any handler runs.
 

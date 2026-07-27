@@ -55,8 +55,7 @@ abstract contract OndolTestBase is Test {
         guard = new OndolTransferGuard(
             IDojangScroll(DojangConfig.DOJANG_SCROLL),
             DojangConfig.acceptedAttesterIds(),
-            OTP_THRESHOLD,
-            codes
+            OTP_THRESHOLD
         );
         arise = new AriseModule(codes);
         impl = new OndolAccount();
@@ -122,20 +121,6 @@ abstract contract OndolTestBase is Test {
     function _ethTransfer(address to, uint256 amount) internal pure returns (Call[] memory calls) {
         calls = new Call[](1);
         calls[0] = Call({target: to, value: amount, data: ""});
-    }
-
-    /// @dev Issues a guard OTP for a large transfer, byte-identical to the domain
-    ///      OndolTransferGuard constructs.
-    function _issueGuardOtp(address recipient, uint256 value, string memory code) internal {
-        string memory domain = string.concat(
-            "suho.guard:", account.toHexString(), ":", recipient.toHexString(), ":", value.toDecimalString()
-        );
-        codes.issueCode(
-            account,
-            domain,
-            keccak256(abi.encodePacked(account, domain, code)),
-            uint64(block.timestamp + 10 minutes)
-        );
     }
 
     /// @dev Issues an arise recovery code committing to (account, new pubkey).

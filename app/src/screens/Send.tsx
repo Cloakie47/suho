@@ -16,7 +16,7 @@ import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { capForAccount } from "../execute";
 import { assertWithPasskey } from "../webauthn";
-import { activeAccount, isLegacyDemo, storedCredential, OTP_THRESHOLD_WEI } from "../config";
+import { activeAccount, isLegacyDemo, storedCredential, LARGE_SEND_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
@@ -33,12 +33,12 @@ interface Recipient {
 }
 
 // The lifecycle toast is the transaction surface; inline phases cover only the
-// passkey prompt, the OTP modal, and pre-relay errors.
+// passkey prompt, the hold-to-confirm modal, and pre-relay errors.
 type SendPhase =
   | { k: "idle" }
   | { k: "signing" }
   | { k: "inflight" }
-  | { k: "otp" } // confirm interstitial for a large unverified transfer
+  | { k: "confirm" } // hold-to-confirm interstitial for a large unverified transfer
   | { k: "error"; message: string };
 
 const icon = { size: 14, strokeWidth: 1.5 } as const;
@@ -164,12 +164,13 @@ function ActivityFeed({ bump }: { bump: number }) {
   );
 }
 
-/** R5: OTP interstitial as an L2 modal — 6 code boxes, countdown ring. */
-/** Guarded-transfer confirmation. A large transfer to an unverified address is
- *  the one send that stops to confirm. There's no code to enter or read — the
- *  guardian issues and applies the one-time code during relay — so this is a
- *  single deliberate confirm, then one passkey prompt completes the send. */
-function OtpModal({
+/** Hold-to-confirm interstitial for the one risky send: a large transfer to an
+ *  unverified address. There is NO one-time code — honestly, the only approval is
+ *  your passkey. This modal adds deliberate friction (press and hold) so the send
+ *  can't happen on a stray tap, then one passkey prompt completes it. */
+const HOLD_MS = 1200;
+
+function ConfirmModal({
   recipient,
   amount,
   onConfirm,
@@ -182,11 +183,39 @@ function OtpModal({
   onClose: () => void;
   busy: boolean;
 }) {
+  const [progress, setProgress] = useState(0); // 0..1 hold completion
+  const raf = useRef<number>();
+  const start = useRef<number>(0);
+  const done = useRef(false);
+
+  const stopHold = () => {
+    if (raf.current) cancelAnimationFrame(raf.current);
+    raf.current = undefined;
+    if (!done.current) setProgress(0);
+  };
+  const tick = () => {
+    const p = Math.min(1, (performance.now() - start.current) / HOLD_MS);
+    setProgress(p);
+    if (p >= 1) {
+      done.current = true;
+      onConfirm();
+      return;
+    }
+    raf.current = requestAnimationFrame(tick);
+  };
+  const beginHold = () => {
+    if (busy || done.current) return;
+    start.current = performance.now();
+    raf.current = requestAnimationFrame(tick);
+  };
+
+  const held = busy || done.current;
+
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Confirm large transfer">
-      <div className="l2 otp-modal">
-        <div className="otp-head">
-          <span className="otp-shield" aria-hidden="true">
+      <div className="l2 confirm-modal">
+        <div className="confirm-head">
+          <span className="confirm-shield" aria-hidden="true">
             <TriangleAlert size={26} color="var(--warn)" strokeWidth={1.75} />
           </span>
           <div>
@@ -195,19 +224,26 @@ function OtpModal({
           </div>
         </div>
         <p className="muted" style={{ margin: "12px 0 0" }}>
-          You're sending <b>{amount} ETH</b> to <b className="mono">{recipient}</b> — an address Suho
-          can't identify. A one-time code guards this transfer; Suho applies it for you after you
-          approve with your passkey.
+          You're sending <b>{amount} ETH</b> to <b className="mono">{recipient}</b>, an address Suho
+          can't identify. There's no verification code — your passkey is the only approval. Hold the
+          button to confirm you meant this, then approve with your passkey.
         </p>
         <button
-          className="primary wide"
+          className="primary wide hold-confirm"
           disabled={busy}
-          onClick={onConfirm}
-          style={{ marginTop: 18 }}
+          onPointerDown={beginHold}
+          onPointerUp={stopHold}
+          onPointerLeave={stopHold}
+          onPointerCancel={stopHold}
+          style={{ marginTop: 18, ["--hold" as string]: progress }}
+          aria-label="Press and hold to confirm"
         >
-          {busy ? "Sending…" : "Confirm & send"}
+          <span className="hold-fill" style={{ transform: `scaleX(${progress})` }} aria-hidden="true" />
+          <span className="hold-label">
+            {busy ? "Sending…" : held ? "Confirming…" : progress > 0 ? "Keep holding…" : "Hold to confirm"}
+          </span>
         </button>
-        <button className="secondary" onClick={onClose}>
+        <button className="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </button>
       </div>
@@ -303,16 +339,17 @@ export function Send({
       setPhase({ k: "error", message: "Insufficient balance." });
       return;
     }
-    // Single-prompt guarded send: a large transfer to an unverified address shows
-    // a confirm interstitial first (a click, not a passkey prompt). On confirm,
-    // ONE passkey signature completes it — the guardian issues and applies the
-    // one-time code during relay, since the execute challenge doesn't cover it.
-    const needsOtp = !recipient.verified && value >= OTP_THRESHOLD_WEI;
-    if (needsOtp && phase.k !== "otp") {
-      setPhase({ k: "otp" });
+    // Guarded send: a large transfer to an unverified address shows a
+    // hold-to-confirm interstitial first (deliberate friction, not a passkey
+    // prompt). On confirm, ONE passkey signature completes it. There is no
+    // one-time code — the passkey, bound to this exact recipient+amount, is the
+    // only approval.
+    const needsConfirm = !recipient.verified && value >= LARGE_SEND_THRESHOLD_WEI;
+    if (needsConfirm && phase.k !== "confirm") {
+      setPhase({ k: "confirm" });
       return;
     }
-    const fromOtp = phase.k === "otp";
+    const fromConfirm = phase.k === "confirm";
     let handle: TxToast | null = null;
     try {
       setPhase({ k: "signing" });
@@ -330,7 +367,7 @@ export function Send({
       const { txHash } = await api.relay(
         activeAccount(),
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
-        "", // the guardian issues + applies the guard code when required
+        "", // no OTP: the guard allows a confirmed large unverified send on passkey authority
         webauthn,
         maxGasPayment?.toString(),
       );
@@ -349,7 +386,7 @@ export function Send({
         // Passkey prompt canceled. Not an error: back to the confirm interstitial
         // (if that's where we came from) or idle.
         handle?.dismiss();
-        setPhase(fromOtp ? { k: "otp" } : { k: "idle" });
+        setPhase(fromConfirm ? { k: "confirm" } : { k: "idle" });
         toast.note("Canceled.");
       } else if (handle) {
         handle.error(e); // typed revert -> human sentence in the toast
@@ -366,7 +403,7 @@ export function Send({
     try { return parseEther(amount || "0"); } catch { return 0n; }
   })();
   const willWarn = recipient && !recipient.notFound && !recipient.verified;
-  const willOtp = willWarn && value >= OTP_THRESHOLD_WEI;
+  const willConfirm = willWarn && value >= LARGE_SEND_THRESHOLD_WEI;
   const busy = phase.k === "signing" || phase.k === "inflight";
 
   return (
@@ -429,9 +466,10 @@ export function Send({
             </div>
           </div>
         )}
-        {willOtp && (
+        {willConfirm && (
           <div className="warnbox">
-            Large transfer to an unverified address. A verification code is required.
+            Large transfer to an unverified address — you'll hold to confirm, then approve with
+            your passkey. That signature is the only approval; there's no verification code.
           </div>
         )}
         {phase.k === "signing" && (
@@ -451,8 +489,8 @@ export function Send({
       {/* R2 row 3: real activity feed */}
       <ActivityFeed bump={actBump} />
 
-      {phase.k === "otp" && recipient && (
-        <OtpModal
+      {phase.k === "confirm" && recipient && (
+        <ConfirmModal
           recipient={recipient.display}
           amount={amount}
           onConfirm={() => doSend()}

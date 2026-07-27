@@ -184,7 +184,7 @@ contract OndolAccountV3 {
     function _runCalls(Call[] calldata calls, string calldata otpCode, address guard_) private {
         for (uint256 i = 0; i < calls.length; i++) {
             if (guard_ != address(0)) {
-                // Reverts (e.g. OtpRequired, CodeInvalid) block the whole batch.
+                // A reverting guard blocks the whole batch (defense-in-depth).
                 IOndolTransferGuard(guard_).check(calls[i], otpCode);
             }
             (bool ok, bytes memory ret) = calls[i].target.call{value: calls[i].value}(calls[i].data);
