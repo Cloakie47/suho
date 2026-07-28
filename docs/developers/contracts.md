@@ -29,7 +29,7 @@ All contracts are live on GIWA Sepolia (chain id 91342). All four Suho contracts
 
 ## Config
 
-- Guard OTP threshold: 0.01 ether.
+- Guard large-send threshold: 0.01 ether (at or above it, a send to an unverified address needs a hold-to-confirm plus the passkey; no code).
 - Accepted attester ids from `DojangConfig`: testnet faucet first, Upbit Korea second.
 - Chain: GIWA Sepolia. Normal RPC `https://sepolia-rpc.giwa.io`. Flashblocks RPC `https://sepolia-rpc-flashblocks.giwa.io`. Explorer `https://sepolia-explorer.giwa.io`.
 
@@ -42,7 +42,7 @@ Every milestone is a live transaction.
 | Account upgraded in place (7702 + passkey init) | [`0x5e6e…35ef`](https://sepolia-explorer.giwa.io/tx/0x5e6e4b14af7ad84dda9cc525ff43be0ac1922e3e70b8be66e0ecdbd2656835ef) |
 | Send to a verified name | [`0x5140…c8ec`](https://sepolia-explorer.giwa.io/tx/0x5140fa4f8d3081b8f1accd82b1df4c157410cd055c888aead21463ff1263c8ec) |
 | Small send to a stranger, warned | [`0xf1ab…300d`](https://sepolia-explorer.giwa.io/tx/0xf1ab1cdc2243ea49fc054a4b6fd4e54edb6bde80be7d04be6494d8fc37bf300d) |
-| Large send, held for a code | [`0x3c3f…4b03`](https://sepolia-explorer.giwa.io/tx/0x3c3fb31d608d984388cdadc37e81dcf9f631412542a1d83f6b3e67782ca24b03) |
+| Guard: large send to a stranger (passkey + hold-to-confirm, no code) | [`OndolTransferGuard 0x4E39…6eBE`](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) |
 | Arise, passkey rotated | [`0x3677…6bc3`](https://sepolia-explorer.giwa.io/tx/0x36770b1bc51c3b6972bb50b5b5d36b65e52121867fc8e1f90d4f254e85676bc3) |
 | Upgraded v1 to v2 in place | [`0x2a24…98af`](https://sepolia-explorer.giwa.io/tx/0x2a24fa95278db11517d9af46e9b43d9046784d82ab1f1cdec0972bd6316598af) |
 | Stranger onboarded gasless | [`0xf00b…ce42`](https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42) |

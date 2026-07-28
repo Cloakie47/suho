@@ -16,7 +16,7 @@ npm install
 npm run dev          # http://localhost:8787
 ```
 
-The guardian serves the app's reads and relays, plus the verification service at `/issuer`. Issued codes also land in `guardian/codes.log` as a fallback.
+The guardian serves the app's reads and relays. Recovery codes are emailed to the account's registered address; the old public `/issuer` code portal is retired (it now returns 410).
 
 ## App
 
@@ -34,7 +34,7 @@ Both should return 200.
 
 ```bash
 curl -s -o /dev/null -w "app %{http_code}\n" http://localhost:5173/
-curl -s -o /dev/null -w "issuer %{http_code}\n" http://localhost:8787/issuer
+curl -s -o /dev/null -w "guardian %{http_code}\n" http://localhost:8787/health
 ```
 
 If the app shows "Can't reach the guardian service", start the guardian and re-check.

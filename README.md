@@ -117,17 +117,17 @@ Migration is binding:
 ## Screens
 
 Upgrade (7702 in place, passkey created) · Send (live up.id resolution, seal /
-warning / OTP interstitial, measured confirmation times) · Directory
-(event-scanned, verified-active names only, deep-links to Send) · Card
-(self-attested identity card on EAS, refUID version chain, QR + read-only
-`#/verify/<address>` view) · Arise (code-based passkey recovery, prove-it
-panel).
+warning / hold-to-confirm for large sends to strangers, measured confirmation
+times) · Directory (event-scanned, verified-active names only, deep-links to
+Send) · Card (self-attested identity card on EAS, refUID version chain, QR +
+read-only `#/verify/<address>` view) · Arise (email-code passkey recovery,
+prove-it panel).
 
 ## Running the demo
 
 ```bash
-# terminal 1 — guardian ("Upbit Verification Service" on the projector)
-cd guardian && npm i && npm run dev     # port 8787; codes also land in codes.log
+# terminal 1 — guardian (relayer + recovery-email issuer)
+cd guardian && npm i && npm run dev     # port 8787
 
 # terminal 2 — app
 cd app && npm i && npm run dev          # port 5173

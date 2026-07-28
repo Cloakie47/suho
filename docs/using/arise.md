@@ -4,11 +4,12 @@ Arise recovers a lost device. You rotate to a new passkey with a single-use code
 
 ## The flow
 
-The Arise screen is a three-step rail.
+Recovery happens on a fresh device with nothing loaded, so Arise starts by asking which account to recover. The screen is a step rail.
 
-1. **New passkey.** Create a passkey on the new device.
-2. **Request code.** The account requests a recovery code from the issuer.
-3. **Enter code and arise.** Read the code from the [verification service](/internals/codes), enter it, and tap Arise.
+1. **Find account.** Enter the address or up.id of the account. Arise confirms it is a Suho account and that recovery email is enabled.
+2. **New passkey.** Create a passkey on the new device.
+3. **Request code.** A single-use recovery code is emailed to the account's registered recovery address. Nothing is shown on any page.
+4. **Enter code and arise.** Enter the emailed code and tap Arise.
 
 When it completes, the account's passkey is rotated. The old passkey stops working. The new one takes over.
 

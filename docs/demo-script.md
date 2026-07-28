@@ -6,17 +6,15 @@ feature fires on that same account.
 
 ## Pre-flight (before recording)
 
-**Windows open (only these two visible):**
+**Windows open (only these visible):**
 1. Browser in a **fresh profile** (no Suho state) at `http://localhost:5173`,
    ~1440px wide. What the viewer sees all demo: the hanji-light theme. Warm
    paper ground, white hairline cards, ink text, one red accent. Red appears
    only on seals, primary buttons, and active nav.
-2. A second browser tab at the **Verification Service**,
-   `http://localhost:8787/issuer`. Same hanji theme as the app, titled
-   "Verification Service (testnet issuer, simulated)". Codes appear here live
-   with a countdown the moment they are issued. Recovery codes now go to email;
-   the large-send act uses no code at all (hold-to-confirm + passkey). (Fallback
-   for recovery: check the recovery inbox.)
+2. The recovery email inbox (for the Arise act) open in a tab. Recovery codes are
+   emailed to the account's registered address; there is no public code page (the
+   old `/issuer` portal is retired). The large-send act uses no code at all
+   (hold-to-confirm + passkey).
 Hidden but running: the guardian and vite terminals.
 
 **Explorer tabs pre-opened (sepolia-explorer.giwa.io):**
@@ -33,11 +31,10 @@ relay; a dead guardian shows as "Can't reach the guardian service" in the app.
 - **App loads:** open `http://localhost:5173` — you land on onboarding (fresh
   profile) or the Send dashboard. If it shows the guardian-unreachable card,
   the guardian is down.
-- **Verification service loads:** open `http://localhost:8787/issuer` — the
-  "Verification Service (testnet issuer, simulated)" page renders. This also
-  confirms the guardian is serving.
+- **Guardian is serving:** open `http://localhost:8787/health` — it returns an
+  ok JSON with the relayer balance and chain head.
 - One-line check from a terminal (both should print `200`):
-  `curl -s -o /dev/null -w "app %{http_code}\n" http://localhost:5173/ ; curl -s -o /dev/null -w "issuer %{http_code}\n" http://localhost:8787/issuer`
+  `curl -s -o /dev/null -w "app %{http_code}\n" http://localhost:5173/ ; curl -s -o /dev/null -w "guardian %{http_code}\n" http://localhost:8787/health`
 - If either is down: start it (guardian: `cd guardian && npm run dev`; app:
   `cd app && npm run dev`) and re-check before recording.
 
@@ -116,9 +113,9 @@ theater."*
 
 *"The phone is gone. Watch what does NOT happen: no seed phrase, no support
 ticket, no new address."* Arise screen: numbered step rail on the left (active
-step ringed in red), white cards on the right. Create new passkey (Hello,
-"the new phone") → request code → switch to the **verification service** tab
-and read the recovery code → **Arise** → toast: "You have risen · X.Xs".
+step ringed in red), white cards on the right. Enter the account to recover →
+create new passkey (Hello, "the new phone") → request code → read the recovery
+code from the **email inbox** → **Arise** → toast: "You have risen · X.Xs".
 Prove-it: two side-by-side white cards, red ✗ old passkey (toast: *"This
 passkey can't sign for the account"*), jade ✓ new passkey (0.0001 send lands).
 Point at tab T3.

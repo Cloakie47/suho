@@ -18,7 +18,7 @@ Fork tests prove that a malicious relayer cannot tamper with a batch, replay a s
 
 ## V2 and gasless onboarding
 
-The current implementation is `OndolAccountV2`. It adds `initializeWithSig`, a signature-gated setup. A relayer can initialize a fresh account with an EIP-712 signature from the account's own key. The fresh account needs no gas.
+New accounts run `OndolAccountV3` behind a proxy (see below); `OndolAccountV2` is the legacy direct-delegation implementation. Both use `initializeWithSig`, a signature-gated setup: a relayer initializes a fresh account with an EIP-712 signature from the account's own key, so the fresh account needs no gas.
 
 The domain binds the chain id and the account address, so a setup signature cannot replay across chains or onto another account. Low-s is enforced, matching the malleability rule on the P-256 side.
 
