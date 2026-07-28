@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
-import { capForAccount } from "../execute";
+import { capForAccount, assertAffordable, InsufficientFundsError } from "../execute";
 import { assertWithPasskey } from "../webauthn";
 import { activeAccount, isLegacyDemo, storedCredential, LARGE_SEND_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
@@ -171,13 +171,11 @@ function ActivityFeed({ bump }: { bump: number }) {
 const HOLD_MS = 1200;
 
 function ConfirmModal({
-  recipient,
   amount,
   onConfirm,
   onClose,
   busy,
 }: {
-  recipient: string;
   amount: string;
   onConfirm: () => void;
   onClose: () => void;
@@ -224,9 +222,7 @@ function ConfirmModal({
           </div>
         </div>
         <p className="muted" style={{ margin: "12px 0 0" }}>
-          You're sending <b>{amount} ETH</b> to <b className="mono">{recipient}</b>, an address Suho
-          can't identify. There's no verification code — your passkey is the only approval. Hold the
-          button to confirm you meant this, then approve with your passkey.
+          Sending <b>{amount} ETH</b> to an unverified address. Hold to confirm.
         </p>
         <button
           className="primary wide hold-confirm"
@@ -335,9 +331,18 @@ export function Send({
       setPhase({ k: "error", message: "Invalid amount." });
       return;
     }
-    if (value > BigInt(status.balance)) {
-      setPhase({ k: "error", message: "Insufficient balance." });
-      return;
+    // Affordability preflight (value + gas reimbursement cap) with a clear
+    // message BEFORE the hold-to-confirm or passkey prompt.
+    try {
+      const cap = await capForAccount(activeAccount());
+      await assertAffordable(activeAccount(), [{ target: recipient.address, value, data: "0x" }], cap);
+    } catch (e) {
+      if (e instanceof InsufficientFundsError) {
+        setPhase({ k: "error", message: e.human });
+        return;
+      }
+      // A balance/cap read failure (network) shouldn't block; the relay path
+      // surfaces a mapped error if it truly can't proceed.
     }
     // Guarded send: a large transfer to an unverified address shows a
     // hold-to-confirm interstitial first (deliberate friction, not a passkey
@@ -467,10 +472,7 @@ export function Send({
           </div>
         )}
         {willConfirm && (
-          <div className="warnbox">
-            Large transfer to an unverified address — you'll hold to confirm, then approve with
-            your passkey. That signature is the only approval; there's no verification code.
-          </div>
+          <div className="warnbox">Large transfer to an unverified address. You'll hold to confirm.</div>
         )}
         {phase.k === "signing" && (
           <div className="status-line">
@@ -491,7 +493,6 @@ export function Send({
 
       {phase.k === "confirm" && recipient && (
         <ConfirmModal
-          recipient={recipient.display}
           amount={amount}
           onConfirm={() => doSend()}
           onClose={() => setPhase({ k: "idle" })}

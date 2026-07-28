@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "sync-deployments": "node scripts/sync-deployments.mjs",
+    "predev": "node scripts/sync-deployments.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/sync-deployments.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },

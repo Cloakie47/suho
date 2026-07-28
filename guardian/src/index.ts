@@ -127,6 +127,10 @@ const issuedCodes = new Map<string, { expiresAt: number }>();
 // Below the floor, sponsored onboarding pauses; reimbursed ops keep working.
 const RELAYER_FLOOR_WEI = BigInt(process.env.SUHO_RELAYER_FLOOR_WEI ?? "0"); // 0 = disabled
 const ONBOARD_DAILY_CAP = Number(process.env.SUHO_ONBOARD_DAILY_CAP ?? "200");
+// Hard reserve (independent of the optional floor): if the relayer can't comfortably
+// cover a sponsored onboarding, pause it with a clear "needs a top-up" message rather
+// than letting the tx fail with a raw revert. ~0.0003 ETH is many GIWA onboardings.
+const ONBOARD_MIN_RESERVE_WEI = BigInt(process.env.SUHO_ONBOARD_MIN_RESERVE_WEI ?? "300000000000000");
 const startedAt = Date.now();
 let relaysServed = 0;
 let sponsoredOnboardsToday = 0;
@@ -548,6 +552,12 @@ app.post("/onboard", async (req, res) => {
       // Relayer below floor: pause creation, keep reimbursed ops working.
       return res.status(503).json({ error: "OnboardingPaused" });
     }
+    // Hard reserve check (independent of the optional floor): never let a
+    // near-empty relayer attempt a sponsored onboarding and fail with a raw
+    // revert — pause it with a clear, mappable reason instead.
+    if ((await relayerBalanceCached()) < ONBOARD_MIN_RESERVE_WEI) {
+      return res.status(503).json({ error: "RelayerUnfunded" });
+    }
     if (sponsoredOnboardsToday >= ONBOARD_DAILY_CAP) {
       return res.status(429).json({ error: "OnboardingDailyCapReached" });
     }
@@ -646,7 +656,24 @@ app.post("/onboard", async (req, res) => {
     res.json({ status: receipt.status, txHash, explorer: explorerTx(txHash), initialized });
   } catch (e) {
     noteError("onboard", e);
-    res.status(500).json({ error: String(e).slice(0, 400) });
+    // Never leak a raw TransactionExecutionError to the client — classify into a
+    // clean, mappable name (the app turns each into a human sentence).
+    const revert = revertName(e);
+    const m = String(e);
+    if (/insufficient funds/i.test(m)) {
+      return res.status(503).json({ error: "RelayerUnfunded" });
+    }
+    if (revert) {
+      // e.g. InvalidInitSignature (init sig / guard mismatch), AlreadyInitialized.
+      return res.status(400).json({ error: revert });
+    }
+    if (/timed out|took too long|fetch failed|ETIMEDOUT|ECONNREFUSED|ECONNRESET|socket hang up/i.test(m)) {
+      return res.status(504).json({ error: "NetworkTimeout" });
+    }
+    if (/revert/i.test(m)) {
+      return res.status(400).json({ error: "OnboardingReverted" });
+    }
+    return res.status(500).json({ error: "OnboardingFailed" });
   }
 });
 

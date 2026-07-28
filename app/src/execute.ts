@@ -1,8 +1,41 @@
 import type { Hex } from "viem";
 import { api } from "./api";
-import { accountNonce, computeChallenge, isUpgradeable, watchReceipt, type Call } from "./chain";
+import { accountNonce, computeChallenge, flashClient, isUpgradeable, watchReceipt, type Call } from "./chain";
 import { assertWithPasskey, type AssertionPayload } from "./webauthn";
 import { activeAccount, storedCredential } from "./config";
+import { fmtEth } from "./ui";
+
+/** Thrown by assertAffordable when the account can't cover value + gas cap. It
+ *  carries a ready-made human sentence (`.human`) that errors.ts surfaces
+ *  verbatim, so the user is told the shortfall and where to fund BEFORE we ever
+ *  prompt for a passkey or hit the chain. */
+export class InsufficientFundsError extends Error {
+  human: string;
+  constructor(
+    public account: Hex,
+    public neededWei: bigint,
+    public balanceWei: bigint,
+  ) {
+    super("InsufficientFunds");
+    this.name = "InsufficientFundsError";
+    this.human =
+      `Not enough ETH. You need about ${fmtEth(neededWei)} ETH to cover this ` +
+      `(this account has ${fmtEth(balanceWei)}). Add funds to ${account} and try again.`;
+  }
+}
+
+/** Preflight: can `account` cover the sum of call values plus the gas
+ *  reimbursement cap? Reads a fresh balance and throws InsufficientFundsError
+ *  with a human message if not. Call this before signing/relaying any execute. */
+export async function assertAffordable(
+  account: Hex,
+  calls: Call[],
+  maxGasPayment?: bigint,
+): Promise<void> {
+  const balance = await flashClient.getBalance({ address: account });
+  const needed = calls.reduce((sum, c) => sum + c.value, 0n) + (maxGasPayment ?? 0n);
+  if (balance < needed) throw new InsufficientFundsError(account, needed, balance);
+}
 
 /** Sign a guardian-issued gate challenge with this device's passkey. Proves
  *  account control before the guardian reveals a code (H4) or binds recovery
@@ -40,6 +73,9 @@ export async function executeWithPasskey(
   const credentialId = storedCredential();
   if (!credentialId) throw new Error("No passkey linked on this device. Visit Upgrade first.");
   const [nonce, maxGasPayment] = await Promise.all([accountNonce(account), capForAccount(account)]);
+  // Affordability preflight BEFORE the passkey prompt: don't make the user
+  // authenticate a transaction their account can't pay for.
+  await assertAffordable(account, calls, maxGasPayment);
   const challenge = computeChallenge(account, nonce, calls, maxGasPayment);
   const webauthn = await assertWithPasskey(credentialId, challenge);
   const t0 = performance.now();

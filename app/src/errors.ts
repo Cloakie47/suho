@@ -13,6 +13,37 @@ const SENTENCES: Record<string, string> = {
   "over rate limit": "GIWA is rate limiting right now. Wait a moment and try again.",
   // on-chain / guard / attester reverts
   TransactionReverted: "The transaction reverted on-chain. Nothing moved.",
+  // Not enough ETH to cover the gas reimbursement the account owes the relayer.
+  // (Value shortfalls are caught earlier by the affordability preflight.)
+  CannotCoverGas: "Not enough ETH to cover the network fee. Add funds to this account and try again.",
+  // A call inside the batch reverted. We can't always know why from on-chain data,
+  // so keep the message generic; the raw name stays in the details disclosure.
+  CallFailed: "This transaction couldn't complete. Nothing moved.",
+  InitCallFailed: "This transaction couldn't complete. Nothing moved.",
+  // Setup / auth reverts — shouldn't reach a normal user, but never show the name.
+  AlreadyInitialized: "This account is already set up.",
+  NotInitialized: "This account isn't set up yet.",
+  InvalidInitSignature: "Couldn't verify the setup signature. Try again.",
+  NotSelf: "This transaction couldn't complete.",
+  NotOwner: "This transaction couldn't complete.",
+  NotAriseModule: "This transaction couldn't complete.",
+  // Legacy accounts still on the superseded guard fail closed on a large send to
+  // an unverified address (the old guard required a code; there is no code now).
+  // New accounts use the updated guard and never hit this.
+  OtpRequired:
+    "This account uses an older guard and can't send large amounts to unverified addresses. Create a new account to use the updated guard.",
+  // guardian-level (non-contract) errors that can reach the UI
+  PasskeyRequired: "Confirm with your passkey to continue.",
+  RateLimited: "Too many attempts. Wait a little and try again.",
+  // onboarding failures — every one maps to a specific sentence; the raw error
+  // only ever appears in the details disclosure.
+  OnboardingPaused: "New account creation is paused — the service wallet needs a top-up. Try again shortly.",
+  RelayerUnfunded: "New account creation is paused — the service wallet needs a top-up. Try again shortly.",
+  OnboardingDailyCapReached: "The daily new-account limit was reached. Try again tomorrow.",
+  PasskeyAlreadyOnboarded: "This passkey already has an account.",
+  NetworkTimeout: "The network is slow right now. Try creating the account again.",
+  OnboardingReverted: "Couldn't create the account — the setup transaction was rejected. Please try again.",
+  OnboardingFailed: "Couldn't create the account. Please try again.",
   CodeInvalid: "That code didn't match. Check the verification service.",
   CodeExpired: "Code expired. Request a fresh one.",
   CodeAlreadyUsed: "That code was already used. Request a fresh one.",
@@ -31,6 +62,11 @@ export function humanError(err: unknown): { text: string; raw: string } {
   // the disclosure so "TypeError: Failed to fetch" survives.
   const rawCarrier = (err as { raw?: string })?.raw;
   const raw = rawCarrier ?? message;
+  // Errors carrying a ready-made human sentence (e.g. InsufficientFundsError,
+  // which needs the dynamic amount + address) surface it verbatim. The raw name
+  // stays for the details disclosure.
+  const human = (err as { human?: string })?.human;
+  if (human) return { text: human, raw };
   if (isPasskeyUnavailable(err)) {
     return {
       text: "This device can't use a passkey. You need Windows Hello or another platform passkey.",

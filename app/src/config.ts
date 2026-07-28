@@ -1,3 +1,5 @@
+import deployments from "./deployments.json";
+
 // The guardian is a separate origin in production. Set VITE_GUARDIAN_URL at
 // build time to the deployed guardian; defaults to the local dev process.
 export const GUARDIAN = import.meta.env.VITE_GUARDIAN_URL ?? "http://localhost:8787";
@@ -19,13 +21,19 @@ export const EXPLORER = "https://sepolia-explorer.giwa.io";
 // onboard their own account below.
 export const DEMO_ACCOUNT = "0xacc2a6Eb741E147e8D3Ed9213b070656c908Adad" as const;
 
-// Ondol wiring for onboarding (deployments/giwa-sepolia.json)
-export const ONDOL_V2_IMPL = "0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69" as const;
-export const GUARD_ADDRESS = "0x106953DB14B1183378976E128AE5cd40C4b493d2" as const;
-export const ARISE_ADDRESS = "0x827375200CF4595f71b09497A65BAF10Ca907466" as const;
-// Phase G: new accounts delegate to the proxy and initialize with V3 behind it.
-export const ONDOL_PROXY = "0x5641D0D42bCD6450BE30077998Fe64F263A4887B" as const;
-export const ONDOL_V3_IMPL = "0xff164E70038EB91c342981d95f1f59d04499399E" as const;
+// Ondol wiring for onboarding — DERIVED from the canonical deployments file
+// (contracts/deployments/giwa-sepolia.json), synced into src by the
+// predev/prebuild `sync-deployments` script. Never hardcode these: onboarding
+// signs the Init digest over GUARD_ADDRESS/ARISE_ADDRESS and the guardian passes
+// the same values into initializeWithSig — any drift makes ecrecover fail
+// (InvalidInitSignature) and onboarding reverts. Deriving keeps them in lockstep
+// with whatever is actually deployed.
+const hex = (a: string) => a as `0x${string}`;
+export const GUARD_ADDRESS = hex(deployments.ondolTransferGuard);
+export const ARISE_ADDRESS = hex(deployments.ariseModule);
+export const ONDOL_PROXY = hex(deployments.ondolProxy);
+export const ONDOL_V3_IMPL = hex(deployments.ondolAccountV3Impl);
+export const ONDOL_V2_IMPL = hex(deployments.ondolAccountV2Impl);
 
 export const LS_ACCOUNT = "suho.account";
 export const LS_ACCOUNTS = "suho.accounts";
