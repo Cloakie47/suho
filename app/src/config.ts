@@ -19,6 +19,11 @@ export const RP_ID = import.meta.env.VITE_RP_ID ?? "localhost";
 // The landing page (a separate origin). The app wordmark links here as "home".
 // Dev: the local static server; prod: suhowallet.com. Env-configurable.
 export const LANDING_URL = import.meta.env.VITE_LANDING_URL ?? "http://localhost:8899/";
+// This app's own public origin — used to build absolute, shareable links (e.g.
+// the card QR -> /verify view) that must resolve for anyone who scans them, not
+// just this browser. Set VITE_APP_URL=https://app.suhowallet.com in production;
+// dev falls back to the current origin.
+export const APP_URL = import.meta.env.VITE_APP_URL ?? window.location.origin;
 export const CHAIN_ID = 91342n;
 export const NORMAL_RPC = "https://sepolia-rpc.giwa.io";
 export const FLASH_RPC = "https://sepolia-rpc-flashblocks.giwa.io";

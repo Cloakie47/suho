@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import type { CardVersion } from "./api";
-import { EXPLORER } from "./config";
+import { APP_URL } from "./config";
 import { Seal } from "./ui";
 
 const fmtDate = (t: number) =>
@@ -29,7 +29,7 @@ export function VCard({
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    QRCode.toDataURL(`${EXPLORER}/address/${address}`, {
+    QRCode.toDataURL(`${APP_URL}/#/verify/${address}`, {
       margin: 1,
       width: 152,
       color: { dark: "#1b1917", light: "#ffffff" },
@@ -66,7 +66,7 @@ export function VCard({
             <div className="vcard-name">{card.displayName || "–"}</div>
             {upId && <div className="vcard-upid">{upId}.up.id</div>}
           </div>
-          {qr && <img className="vcard-qr" src={qr} alt="QR: explorer link" />}
+          {qr && <img className="vcard-qr" src={qr} alt="QR: open this card's verify view" />}
         </div>
         <div className="vcard-fields">
           <div>
