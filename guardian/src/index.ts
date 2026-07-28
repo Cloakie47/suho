@@ -57,7 +57,7 @@ import { sendConfirmationCode, sendAriseCode, sendEmailChangeNotice } from "./em
 import { emailHash, decryptEmail } from "./crypto.js";
 import { randomInt, randomBytes } from "node:crypto";
 import { getDirectory, prewarmDirectory } from "./directory.js";
-import { getCard } from "./card.js";
+import { getCard, prewarmCards } from "./card.js";
 
 // P4: demo readiness — alice must cover one verified send (0.0002) plus one OTP
 // send at threshold+0.001, with 30% margin. Execute gas is relayer-paid, so only
@@ -1012,4 +1012,5 @@ app.listen(PORT, async () => {
     console.log(`db: unavailable (recovery disabled) — ${String(e).slice(0, 80)}`);
   }
   prewarmDirectory();
+  prewarmCards();
 });

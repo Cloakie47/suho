@@ -78,6 +78,16 @@ async function scanToHead(): Promise<void> {
   return scanning;
 }
 
+/** Warm the card log-scan cache at boot so the first user's card view is fast.
+ *  A cold getCard does a full historical EAS scan (~20s over the public RPC);
+ *  after this the scan is incremental. Fire-and-forget — getCard still scans on
+ *  demand if this hasn't finished. */
+export function prewarmCards(): void {
+  scanToHead().catch(() => {
+    /* best-effort warm-up; getCard will scan on demand */
+  });
+}
+
 async function loadVersion(uid: Hex): Promise<CardVersion | null> {
   const a = await publicClient.readContract({
     address: ADDR.eas,
