@@ -21,7 +21,39 @@ export function Card({ status }: { status: Status }) {
   const [fields, setFields] = useState<CardFields>({ displayName: "", contact: "", remarks: "" });
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
   const [syncing, setSyncing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const toast = useToast();
+
+  // Render the actual card DOM to a PNG the user can save. html2canvas is loaded
+  // lazily (kept out of the main bundle). The QR is a data-URL <img>, so it is
+  // captured losslessly and stays scannable. The card's inline 3D-tilt transform
+  // is neutralized so the export is flat and true to the design.
+  const downloadCard = async () => {
+    const el = document.querySelector(".vcard") as HTMLElement | null;
+    if (!el) return;
+    setDownloading(true);
+    const prevTransform = el.style.transform;
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      if (document.fonts?.ready) await document.fonts.ready;
+      el.style.transform = "none";
+      const canvas = await html2canvas(el, { backgroundColor: null, scale: 2, useCORS: true });
+      const slug =
+        (info?.current?.displayName || status.upId || "card")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "card";
+      const link = document.createElement("a");
+      link.download = `suho-card-${slug}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch {
+      toast.note("Couldn't render the card image. Try again.");
+    } finally {
+      el.style.transform = prevTransform;
+      setDownloading(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -127,6 +159,14 @@ export function Card({ status }: { status: Status }) {
                   <div className="card hover" style={{ marginTop: 16 }}>
                     <button className="primary wide" style={{ marginTop: 0 }} onClick={startEdit}>
                       Edit card
+                    </button>
+                    <button
+                      className="secondary wide"
+                      style={{ marginTop: 10 }}
+                      onClick={downloadCard}
+                      disabled={downloading}
+                    >
+                      {downloading ? "Rendering…" : "Download card"}
                     </button>
                     <div className="muted" style={{ marginTop: 10, fontSize: "0.8rem" }}>
                       Share the read-only view:{" "}
