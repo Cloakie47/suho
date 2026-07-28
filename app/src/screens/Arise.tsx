@@ -1,17 +1,34 @@
 import { useEffect, useState } from "react";
-import { encodeAbiParameters, keccak256, parseEther, type Hex } from "viem";
-import { api, type Status } from "../api";
+import { encodeAbiParameters, isAddress, keccak256, parseEther, type Hex } from "viem";
+import { api } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { capForAccount } from "../execute";
 import { assertWithPasskey, createPasskey, type PasskeyInfo } from "../webauthn";
-import { activeAccount, EXPLORER, storedCredential, storeCredential } from "../config";
+import {
+  activeAccount,
+  DEMO_ACCOUNT,
+  EXPLORER,
+  setActiveAccount,
+  storedCredential,
+  storeCredential,
+} from "../config";
 import { SealStamp, SuccessCheck, Spinner, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { recordSend } from "../stats";
 import { humanError, isUserCancel } from "../errors";
 
+/** The account being recovered — resolved from the address/name the user enters,
+ *  NOT the active session account. Recovery happens on a fresh device with
+ *  nothing loaded, so Arise must be told which account to recover. */
+interface Target {
+  address: Hex;
+  upId: string | null;
+  maskedEmail?: string;
+}
+
 type Stage =
-  | { k: "intro" }
+  | { k: "identify" }
+  | { k: "found" }
   | { k: "created"; key: PasskeyInfo }
   | { k: "code-sent"; key: PasskeyInfo; expiresAt: number }
   | { k: "arisen"; key: PasskeyInfo; txHash: Hex; ms: number }
@@ -23,24 +40,74 @@ interface ProofState {
 }
 
 /** R5: recovery really is a sequence — the numbered rail earns its place. */
-const STEPS = ["New passkey", "Request code", "Enter code & arise"];
+const STEPS = ["Find account", "New passkey", "Request code", "Enter code & arise"];
+const STAGE_IDX: Record<string, number> = { identify: 0, found: 1, created: 2, "code-sent": 3, arisen: 4 };
 
 function stepState(stage: Stage, i: number): "done" | "active" | "todo" {
-  const current = stage.k === "intro" ? 0 : stage.k === "created" ? 1 : stage.k === "code-sent" ? 2 : 3;
   if (stage.k === "arisen") return "done";
+  const current = STAGE_IDX[stage.k] ?? 0;
   if (i < current) return "done";
   if (i === current) return "active";
   return "todo";
 }
 
-export function Arise({ status, refresh }: { status: Status; refresh: () => void }) {
-  const [stage, setStage] = useState<Stage>({ k: "intro" });
+export function Arise({ refresh }: { refresh: () => void }) {
+  const [stage, setStage] = useState<Stage>({ k: "identify" });
   const [busy, setBusy] = useState<string | null>(null);
+  // Prefill with the active account only when it's a real, non-demo account
+  // (e.g. arrived here from the switcher's "Recover"); a fresh session is blank.
+  const [input, setInput] = useState(() => {
+    const a = activeAccount();
+    return a && a.toLowerCase() !== DEMO_ACCOUNT.toLowerCase() ? (a as string) : "";
+  });
+  const [target, setTarget] = useState<Target | null>(null);
   const [code, setCode] = useState("");
   const [countdown, setCountdown] = useState(0);
   const [proof, setProof] = useState<ProofState>({});
   const [oldCredentialId] = useState(() => storedCredential());
   const toast = useToast();
+
+  /** Step 0: resolve the account to recover and confirm it can be recovered. */
+  const identify = async () => {
+    const q = input.trim();
+    if (!q) {
+      setStage({ k: "error", message: "Enter the address or up.id name of the account to recover." });
+      return;
+    }
+    setBusy("Looking up the account on GIWA…");
+    try {
+      let address: Hex | null = null;
+      if (isAddress(q)) address = q as Hex;
+      else {
+        const r = await api.resolve(q);
+        address = (r.address as Hex) ?? null;
+      }
+      if (!address) {
+        setStage({ k: "error", message: "No account found for that name or address." });
+        return;
+      }
+      const st = await api.status(address);
+      if (!st.isOndolAccount) {
+        setStage({ k: "error", message: "That address is not a Suho account on GIWA." });
+        return;
+      }
+      const rec = await api.recoveryStatus(address);
+      if (!rec.enabled) {
+        setStage({
+          k: "error",
+          message:
+            "This account has no recovery email set, so it can't be recovered. Recovery must be enabled before a device is lost.",
+        });
+        return;
+      }
+      setTarget({ address, upId: st.upId, maskedEmail: rec.maskedEmail });
+      setStage({ k: "found" });
+    } catch (e) {
+      setStage({ k: "error", message: humanError(e).text });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (stage.k !== "code-sent") return;
@@ -51,18 +118,20 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   }, [stage]);
 
   const createNew = async () => {
+    if (!target) return;
     setBusy("Waiting for Windows Hello. This is the new device's passkey…");
     try {
       // user.name carries the FULL account address (plus the up.id when known)
       // so the device credential manager doubles as an address backup. The
       // shorter displayName stays readable in the OS chooser.
-      const account = activeAccount();
-      const name = status.upId ? `${status.upId}.up.id · ${account}` : account;
-      const key = await createPasskey(name, status.upId ? `${status.upId}.up.id` : shortAddr(account));
+      const { address, upId } = target;
+      const name = upId ? `${upId}.up.id · ${address}` : address;
+      const key = await createPasskey(name, upId ? `${upId}.up.id` : shortAddr(address));
       setStage({ k: "created", key });
     } catch (e) {
       if (isUserCancel(e)) {
-        setStage({ k: "intro" });
+        // Account is still identified; return to the create-passkey step.
+        setStage({ k: "found" });
         toast.note("Canceled.");
       } else {
         setStage({ k: "error", message: humanError(e).text });
@@ -73,14 +142,15 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   };
 
   const requestCode = async (key: PasskeyInfo) => {
-    setBusy("Emailing a recovery code to your address on file…");
+    if (!target) return;
+    setBusy("Emailing a recovery code to the address on file…");
     try {
       const newPubKeyHash = keccak256(
         encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [key.x, key.y]),
       );
       // H3: the response is generic (no enumeration); the code arrives by email.
       // Soft client-side expiry (~10 min) mirrors the on-chain code lifetime.
-      await api.ariseRequest(activeAccount(), newPubKeyHash);
+      await api.ariseRequest(target.address, newPubKeyHash);
       setCode("");
       setStage({ k: "code-sent", key, expiresAt: Math.floor(Date.now() / 1000) + 600 });
     } catch (e) {
@@ -91,18 +161,22 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
   };
 
   const complete = async (key: PasskeyInfo) => {
+    if (!target) return;
     setBusy("Submitting arise()…");
     // Button says "Arise"; the toast continues the verb through the lifecycle.
     const handle = toast.begin("Rising…");
     try {
       const t0 = performance.now();
-      const r = await api.ariseComplete(activeAccount(), key.x, key.y, code);
+      const r = await api.ariseComplete(target.address, key.x, key.y, code);
       const timing = await watchReceipt(r.txHash, t0, {
         preconf: (ms) => handle.preconfirmed("You have risen", ms),
         final: () => handle.final(r.txHash),
         reverted: () => handle.error(new Error("TransactionReverted")),
       });
-      storeCredential(activeAccount(), key.credentialId);
+      // The recovered account + its new passkey become the active session so the
+      // fresh device can use it immediately.
+      storeCredential(target.address, key.credentialId);
+      setActiveAccount(target.address);
       setStage({ k: "arisen", key, txHash: r.txHash, ms: timing.preconfMs });
       refresh();
     } catch (e) {
@@ -114,22 +188,24 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
 
   /** Prove-it panel: a real 0.0001 ETH send to suho.up.id with either key. */
   const proveSend = async (credentialId: string, label: "old" | "fresh") => {
+    if (!target) return;
+    const account = target.address;
     setBusy(label === "old" ? "Trying the OLD passkey…" : "Sending with the NEW passkey…");
     let handle: TxToast | null = null;
     try {
-      const target = (await api.resolve("suho")).address!;
-      const calls: Call[] = [{ target, value: parseEther("0.0001"), data: "0x" }];
+      const dest = (await api.resolve("suho")).address!;
+      const calls: Call[] = [{ target: dest, value: parseEther("0.0001"), data: "0x" }];
       const [nonce, maxGasPayment] = await Promise.all([
-        accountNonce(activeAccount()),
-        capForAccount(activeAccount()),
+        accountNonce(account),
+        capForAccount(account),
       ]);
-      const challenge = computeChallenge(activeAccount(), nonce, calls, maxGasPayment);
+      const challenge = computeChallenge(account, nonce, calls, maxGasPayment);
       const webauthn = await assertWithPasskey(credentialId, challenge);
       handle = toast.begin("Sending 0.0001 ETH to suho.up.id…");
       const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
-        activeAccount(),
+        account,
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
         "",
         webauthn,
@@ -190,13 +266,50 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
             <div className="card">
               <h2>Lost your device?</h2>
               <p className="muted">
-                Arise moves your account to a new passkey. One single-use code, bound to this exact recovery, authorizes it.
+                Arise moves an account to a new passkey. One single-use code, bound to this exact recovery, authorizes it. Start by telling us which account to recover.
               </p>
 
-              {stage.k === "intro" && (
-                <button className="primary wide" onClick={createNew} disabled={!!busy}>
-                  Create new passkey
-                </button>
+              {stage.k === "identify" && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="0x address or name.up.id of the account"
+                    value={input}
+                    aria-label="Account to recover"
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !busy && identify()}
+                  />
+                  <p className="muted" style={{ fontSize: "0.85rem", marginTop: 8 }}>
+                    The recovery code is emailed to the address bound to that account — you don't
+                    need anything from the lost device.
+                  </p>
+                  <button className="primary wide" onClick={identify} disabled={!!busy}>
+                    Find account
+                  </button>
+                </>
+              )}
+
+              {stage.k === "found" && target && (
+                <>
+                  <p className="okbox">
+                    ✓ {target.upId ? `${target.upId}.up.id` : shortAddr(target.address)} — recovery is
+                    enabled{target.maskedEmail ? `; the code goes to ${target.maskedEmail}` : ""}.
+                  </p>
+                  <p className="mono muted" style={{ fontSize: "0.8rem" }}>{target.address}</p>
+                  <button className="primary wide" onClick={createNew} disabled={!!busy}>
+                    Create new passkey
+                  </button>
+                  <button
+                    className="switch-link"
+                    onClick={() => {
+                      setTarget(null);
+                      setStage({ k: "identify" });
+                    }}
+                    disabled={!!busy}
+                  >
+                    Recover a different account
+                  </button>
+                </>
               )}
 
               {stage.k === "created" && (
@@ -212,9 +325,9 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
               {stage.k === "code-sent" && (
                 <>
                   <p className="muted">
-                    If this account has recovery enabled, a 6-digit code is on its way to your
-                    recovery email. Enter it below. Nothing is shown here — the code only reaches
-                    the email you bound.
+                    A 6-digit code is on its way to{" "}
+                    {target?.maskedEmail ? <b>{target.maskedEmail}</b> : "the recovery email on file"}.
+                    Enter it below. Nothing is shown here — the code only reaches the bound email.
                   </p>
                   <input
                     type="text"
@@ -250,7 +363,21 @@ export function Arise({ status, refresh }: { status: Status; refresh: () => void
                 </>
               )}
 
-              {stage.k === "error" && <div className="errbox">{stage.message}</div>}
+              {stage.k === "error" && (
+                <>
+                  <div className="errbox">{stage.message}</div>
+                  <button
+                    className="primary wide"
+                    style={{ marginTop: 12 }}
+                    onClick={() => {
+                      setTarget(null);
+                      setStage({ k: "identify" });
+                    }}
+                  >
+                    Start over
+                  </button>
+                </>
+              )}
             </div>
           )}
 

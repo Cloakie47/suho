@@ -103,10 +103,12 @@ function makeBootstrap(): Bootstrap {
 export function Onboard({
   onDone,
   onLegacy,
+  onRecover,
   paused = false,
 }: {
   onDone: () => void;
   onLegacy: () => void;
+  onRecover: () => void;
   paused?: boolean;
 }) {
   const [stage, setStage] = useState<Stage>({ k: "intro" });
@@ -187,6 +189,9 @@ export function Onboard({
             )}
             <button className="primary wide" onClick={create} disabled={paused}>
               Create your Suho account
+            </button>
+            <button className="secondary" onClick={onRecover} style={{ fontSize: "0.8rem" }}>
+              Recover a lost account
             </button>
             <button className="secondary" onClick={onLegacy} style={{ fontSize: "0.8rem" }}>
               I have the demo account

@@ -507,6 +507,14 @@ export default function App() {
     return (
       <Onboard
         paused={status?.sponsoredOnboardingPaused ?? false}
+        onRecover={() => {
+          // Lost-device recovery from a fresh browser: enter the app on the Arise
+          // screen, which asks for the account address itself (no account loaded).
+          setOnboarded(true);
+          setAddingAccount(false);
+          setScreen("arise");
+          refresh();
+        }}
         onDone={() => {
           setStatus(null);
           setOnboarded(true);
@@ -550,7 +558,7 @@ export default function App() {
         />
       )}
       {screen === "card" && <Card status={status} />}
-      {screen === "arise" && <Arise status={status} refresh={refresh} />}
+      {screen === "arise" && <Arise refresh={refresh} />}
     </>
   );
 

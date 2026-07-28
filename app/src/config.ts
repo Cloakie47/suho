@@ -10,6 +10,12 @@ export const GUARDIAN = import.meta.env.VITE_GUARDIAN_URL ?? "http://localhost:8
 export const DOCS_URL =
   import.meta.env.VITE_DOCS_URL ?? "http://localhost:8899/docs/overview/what-is-suho.html";
 export const GITHUB_URL = "https://github.com/Cloakie47/suho";
+// WebAuthn Relying Party ID — the registrable domain passkeys are bound to. MUST
+// be the origin's domain or a parent suffix of it. Dev is "localhost"; in
+// production set VITE_RP_ID=suhowallet.com so passkeys created on
+// app.suhowallet.com are valid (and portable across the apex). A mismatch makes
+// every passkey create/sign fail.
+export const RP_ID = import.meta.env.VITE_RP_ID ?? "localhost";
 // The landing page (a separate origin). The app wordmark links here as "home".
 // Dev: the local static server; prod: suhowallet.com. Env-configurable.
 export const LANDING_URL = import.meta.env.VITE_LANDING_URL ?? "http://localhost:8899/";

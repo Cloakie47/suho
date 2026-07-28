@@ -1,4 +1,5 @@
 import type { Hex } from "viem";
+import { RP_ID } from "./config";
 
 /// Browser-side WebAuthn. Raw artifacts (authenticatorData, clientDataJSON, DER
 /// signature) are shipped to the guardian, which owns DER->(r,s) + low-s
@@ -58,7 +59,7 @@ export async function createPasskey(name: string, displayName?: string): Promise
   const cred = (await navigator.credentials.create({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rp: { name: "Suho", id: "localhost" },
+      rp: { name: "Suho", id: RP_ID },
       user: {
         id: crypto.getRandomValues(new Uint8Array(16)),
         name,
@@ -108,7 +109,7 @@ export async function relinkPasskey(expected: { x: Hex; y: Hex }): Promise<strin
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge,
-      rpId: "localhost",
+      rpId: RP_ID,
       userVerification: "required",
       timeout: 60_000,
     },
@@ -152,7 +153,7 @@ export async function assertWithPasskey(
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: hexToBytes(challenge),
-      rpId: "localhost",
+      rpId: RP_ID,
       allowCredentials: [{ type: "public-key", id: fromB64url(credentialId) }],
       userVerification: "required",
       timeout: 60_000,
