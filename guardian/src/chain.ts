@@ -27,9 +27,8 @@ function requireEnv(name: string): `0x${string}` {
   return v as `0x${string}`;
 }
 
-// Relayer pays gas; the same key owns SuhoCodeAttester (issuer role).
+// Relayer pays gas; the same key owns SuhoCodeAttester (issuer role for recovery codes).
 export const relayerAccount = privateKeyToAccount(requireEnv("DEPLOYER_PRIVATE_KEY"));
-export const issuerAccount = relayerAccount;
 // Demo-only custody: alice's EOA key is held solely for the one-time 7702 upgrade
 // signature. See the custody note in the app spec / README.
 export const aliceAccount = privateKeyToAccount(requireEnv("ALICE_PRIVATE_KEY"));
