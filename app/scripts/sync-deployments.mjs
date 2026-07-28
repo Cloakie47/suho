@@ -3,7 +3,7 @@
 // of truth. Runs on `predev` and `prebuild`. Prevents the class of bug where a
 // redeployed contract (e.g. the guard) updates deployments but a hardcoded app
 // constant silently drifts — which broke onboarding (Init signature mismatch).
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -11,6 +11,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const src = resolve(here, "../../contracts/deployments/giwa-sepolia.json");
 const dst = resolve(here, "../src/deployments.json");
 
+// Resilient: if the canonical file isn't in the build context (a host that
+// prunes the monorepo to app/), keep the committed app/src/deployments.json and
+// exit 0 so prebuild never fails. Cloudflare Pages clones the full repo, so this
+// normally syncs fresh; the guard is insurance against a pruning host.
+if (!existsSync(src)) {
+  console.log(`sync-deployments: source not present (${src}); keeping committed app/src/deployments.json`);
+  process.exit(0);
+}
 const d = JSON.parse(readFileSync(src, "utf8"));
 // Only the fields the app needs; keep it a small, explicit surface.
 const out = {
