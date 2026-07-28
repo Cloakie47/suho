@@ -214,25 +214,7 @@ h2 {
 .strip a:hover { color: var(--ink); }
 .strip .cred { color: var(--gild); }
 
-/* ---------- 5 · the proof ---------- */
-.proof-note { color: var(--ink-dim); margin: 0 0 22px; }
-.ledger {
-  background: var(--hanji-raised); border: 1px solid var(--line);
-  border-radius: 14px; padding: 8px 20px; overflow-x: auto;
-}
-.ledger table { width: 100%; border-collapse: collapse; }
-.ledger th {
-  text-align: left; font-family: var(--mono); font-weight: 500; font-size: 0.75rem;
-  color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 14px 10px 10px; border-bottom: 1px solid rgba(201, 161, 92, 0.3);
-}
-.ledger td { padding: 14px 10px; border-bottom: 1px solid var(--line); font-size: 0.95rem; }
-.ledger tr:last-child td { border-bottom: 0; }
-.tick { color: var(--jade); font-weight: 700; width: 24px; }
-.ledger a { color: var(--ink); }
-.ledger a:hover { color: var(--seal-deep); }
-
-/* ---------- 6 · footer ---------- */
+/* ---------- 5 · footer ---------- */
 footer {
   border-top: 1px solid var(--line); margin-top: 24px; padding: 56px 24px 52px;
   display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center;
@@ -241,7 +223,6 @@ footer {
 .foot-links { display: flex; gap: 12px; color: var(--ink-dim); }
 .foot-links a { color: var(--ink); text-decoration: none; }
 .foot-links a:hover { color: var(--seal-deep); }
-.built { color: var(--ink-dim); font-size: 0.9rem; margin: 4px 0 0; }
 .honesty { color: var(--ink-dim); font-size: 0.78rem; font-style: italic; max-width: 52ch; margin: 2px 0 10px; }
 
 /* ---------- responsive ---------- */
