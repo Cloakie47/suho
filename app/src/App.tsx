@@ -481,8 +481,22 @@ export default function App() {
 
   useEffect(() => {
     refresh();
-    const t = window.setInterval(refresh, 5000);
-    return () => window.clearInterval(t);
+    // Poll status, but skip while the tab is hidden — a backgrounded tab polling
+    // the rate-limited RPC every few seconds is pure waste. Refresh immediately
+    // when the tab becomes visible again so it never shows stale data on return.
+    // (12s, up from 5s; post-write flows do their own immediate refetch.)
+    const tick = () => {
+      if (!document.hidden) refresh();
+    };
+    const t = window.setInterval(tick, 12000);
+    const onVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh]);
 
   // C5: hash route #/verify/<address-or-uid> — shareable read-only view.

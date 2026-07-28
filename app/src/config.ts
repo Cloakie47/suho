@@ -25,8 +25,11 @@ export const LANDING_URL = import.meta.env.VITE_LANDING_URL ?? "http://localhost
 // dev falls back to the current origin.
 export const APP_URL = import.meta.env.VITE_APP_URL ?? window.location.origin;
 export const CHAIN_ID = 91342n;
-export const NORMAL_RPC = "https://sepolia-rpc.giwa.io";
-export const FLASH_RPC = "https://sepolia-rpc-flashblocks.giwa.io";
+// RPC endpoints. The public GIWA RPCs are the default; set VITE_RPC_URL (and
+// optionally VITE_FLASH_RPC_URL) to a dedicated/keyed endpoint to avoid the
+// public RPC's rate limits. No code change needed to swap providers.
+export const NORMAL_RPC = import.meta.env.VITE_RPC_URL ?? "https://sepolia-rpc.giwa.io";
+export const FLASH_RPC = import.meta.env.VITE_FLASH_RPC_URL ?? "https://sepolia-rpc-flashblocks.giwa.io";
 export const EXPLORER = "https://sepolia-explorer.giwa.io";
 // The demo account (alice) — Phase O makes this the LEGACY path; new users
 // onboard their own account below.
