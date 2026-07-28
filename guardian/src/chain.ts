@@ -2,22 +2,17 @@ import "./env.js"; // load guardian/.env + root .env before anything reads proce
 import { createPublicClient, createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-// RPC endpoints. Public GIWA RPCs by default; set SUHO_RPC_URL (and optionally
-// SUHO_FLASH_RPC_URL) to a dedicated/keyed endpoint to escape the public RPC's
-// rate limits. Every read/write client below uses http() (no arg), which reads
-// the chain's default URL, so overriding it here reroutes all of them.
-const RPC_URL = process.env.SUHO_RPC_URL ?? "https://sepolia-rpc.giwa.io";
-export const FLASHBLOCKS_RPC = process.env.SUHO_FLASH_RPC_URL ?? "https://sepolia-rpc-flashblocks.giwa.io";
-
 export const giwaSepolia = defineChain({
   id: 91342,
   name: "GIWA Sepolia",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: { default: { http: [RPC_URL] } },
+  rpcUrls: { default: { http: ["https://sepolia-rpc.giwa.io"] } },
   blockExplorers: {
     default: { name: "GIWA Explorer", url: "https://sepolia-explorer.giwa.io" },
   },
 });
+
+export const FLASHBLOCKS_RPC = "https://sepolia-rpc-flashblocks.giwa.io";
 
 // Writes go through the normal RPC; reads that need freshness use Flashblocks.
 export const publicClient = createPublicClient({ chain: giwaSepolia, transport: http() });

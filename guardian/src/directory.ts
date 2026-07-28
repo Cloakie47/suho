@@ -38,6 +38,15 @@ let scannedTo = 0n;
 let cachedEntries: DirEntry[] = [];
 let gating: Promise<void> | null = null;
 
+// TTL cache: names change slowly, so the expensive scan+gate (a multicall over
+// ~60k names) runs at most once per window instead of on every visit — the main
+// rate-limit driver. A short floor between attempts also prevents a failing gate
+// from re-scanning in a tight loop.
+const CACHE_TTL_MS = 5 * 60_000;
+const MIN_REBUILD_INTERVAL_MS = 30_000;
+let lastBuiltAt = 0; // last successful build
+let lastAttemptAt = 0; // last rebuild attempt (success or failure)
+
 /// Fetch one range; bisect on any limit-shaped failure, retry transient ones.
 ///
 /// EMPTY RESULTS ARE SUSPECT on this RPC: the load balancer includes at least
@@ -195,8 +204,12 @@ async function rebuild(): Promise<void> {
 
 /** Fire-and-forget warmup so the first user request is served from cache. */
 export function prewarmDirectory(): void {
+  lastAttemptAt = Date.now();
   rebuild().then(
-    () => console.log(`directory prewarmed: ${cachedEntries.length} active names (scanned to ${scannedTo})`),
+    () => {
+      lastBuiltAt = Date.now();
+      console.log(`directory prewarmed: ${cachedEntries.length} active names (scanned to ${scannedTo})`);
+    },
     (e) => console.error("directory prewarm failed:", String(e).slice(0, 200)),
   );
 }
@@ -205,8 +218,21 @@ export async function getDirectory(
   q: string,
   refresh: boolean,
 ): Promise<{ entries: DirEntry[]; total: number; shown: number; scannedToBlock: string }> {
-  if (refresh || cachedEntries.length === 0) {
-    await rebuild();
+  const now = Date.now();
+  const stale = cachedEntries.length === 0 || now - lastBuiltAt > CACHE_TTL_MS;
+  // Rebuild only when the cache is stale or the user forced a refresh, and never
+  // more often than the floor (rebuild() itself coalesces concurrent callers).
+  if ((stale || refresh) && now - lastAttemptAt > MIN_REBUILD_INTERVAL_MS) {
+    lastAttemptAt = now;
+    try {
+      await rebuild();
+      lastBuiltAt = Date.now();
+    } catch (e) {
+      // Keep serving whatever we have rather than re-scanning on every request;
+      // only surface the error when there's nothing cached to serve.
+      if (cachedEntries.length === 0) throw e;
+      console.warn("directory rebuild failed; serving cached entries:", String(e).slice(0, 120));
+    }
   }
   const needle = q.trim().toLowerCase();
   const filtered = needle

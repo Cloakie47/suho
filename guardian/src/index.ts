@@ -123,6 +123,19 @@ app.use((req, res, next) => {
 // In-memory mirror of issued arise/otp codes (chain is the source of truth).
 const issuedCodes = new Map<string, { expiresAt: number }>();
 
+// Coalesce concurrent identical read requests: while one is in flight, callers
+// share its promise instead of firing duplicate RPC fan-outs. Cuts load when
+// several tabs/components ask for the same account status, card, or directory at
+// once against the rate-limited public RPC.
+const inflight = new Map<string, Promise<unknown>>();
+function coalesce<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+  const p = fn().finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
 // ---- G4: operating in public — relayer floor, onboarding caps, metrics ----
 // Below the floor, sponsored onboarding pauses; reimbursed ops keep working.
 const RELAYER_FLOOR_WEI = BigInt(process.env.SUHO_RELAYER_FLOOR_WEI ?? "0"); // 0 = disabled
@@ -260,6 +273,7 @@ app.get("/fee", async (_req, res) => {
 app.get("/status", async (req, res) => {
   try {
     const address = String(req.query.address) as Hex;
+    const result = await coalesce(`status:${address.toLowerCase()}`, async () => {
     const [attester, upId, balance, code, implSlot] = await Promise.all([
       verifiedBy(address),
       reverseName(address),
@@ -313,7 +327,7 @@ app.get("/status", async (req, res) => {
         await publicClient.readContract({ address, abi: ondolAccountAbi, functionName: "nonce" })
       ).toString();
     }
-    res.json({
+    return {
       address,
       isVerified: attester !== null,
       verifiedBy: attester,
@@ -332,7 +346,9 @@ app.get("/status", async (req, res) => {
       demoRequiredWei: demoRequiredWei.toString(),
       // Global service state: onboarding pauses when the relayer is below floor.
       sponsoredOnboardingPaused: await sponsoredOnboardingPaused(),
+    };
     });
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -513,7 +529,9 @@ app.get("/issuer/codes", (_req, res) => res.status(410).json({ error: "retired; 
 // Search is server-side (the in-window name set is ~60k+); responses cap at 500.
 app.get("/directory", async (req, res) => {
   try {
-    res.json(await getDirectory(String(req.query.q ?? ""), req.query.refresh === "1"));
+    const q = String(req.query.q ?? "");
+    const refresh = req.query.refresh === "1";
+    res.json(await coalesce(`dir:${q}:${refresh}`, () => getDirectory(q, refresh)));
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -523,7 +541,8 @@ app.get("/directory", async (req, res) => {
 // C4/C5: current card + refUID version history for an account (or a card uid).
 app.get("/card", async (req, res) => {
   try {
-    res.json(await getCard(String(req.query.id ?? "")));
+    const id = String(req.query.id ?? "");
+    res.json(await coalesce(`card:${id.toLowerCase()}`, () => getCard(id)));
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
