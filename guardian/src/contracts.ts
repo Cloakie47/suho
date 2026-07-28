@@ -4,8 +4,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Read the vendored copy that sits INSIDE guardian/src (kept in sync from
+// contracts/deployments by scripts/sync-deployments.mjs on predev/prestart).
+// Reading it locally — not ../../contracts — is what makes the guardian work
+// under Railway's monorepo build, where root=guardian prunes contracts/ out of
+// the deploy context.
 const deployments = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, "../../contracts/deployments/giwa-sepolia.json"), "utf8"),
+  fs.readFileSync(path.resolve(__dirname, "./deployments.json"), "utf8"),
 );
 
 export const ADDR = {

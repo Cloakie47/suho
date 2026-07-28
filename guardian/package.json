@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "sync-deployments": "node scripts/sync-deployments.mjs",
+    "predev": "node scripts/sync-deployments.mjs",
     "dev": "tsx src/index.ts",
+    "prestart": "node scripts/sync-deployments.mjs",
     "start": "tsx src/index.ts",
     "db:init": "tsx src/db-init.ts",
     "selftest": "tsx src/selftest.ts"
