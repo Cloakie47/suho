@@ -20,6 +20,7 @@ const out = {
   ondolProxy: d.ondolProxy,
   ondolAccountV3Impl: d.ondolAccountV3Impl,
   ondolAccountV2Impl: d.ondolAccountV2Impl,
+  ondolAccountImpl: d.ondolAccountImpl, // v1 (legacy) — a valid delegation target
   suhoCodeAttester: d.suhoCodeAttester,
 };
 for (const [k, v] of Object.entries(out)) {

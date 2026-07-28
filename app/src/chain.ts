@@ -6,7 +6,7 @@ import {
   parseAbi,
   type Hex,
 } from "viem";
-import { CHAIN_ID, FLASH_RPC, NORMAL_RPC } from "./config";
+import { CHAIN_ID, FLASH_RPC, NORMAL_RPC, ONDOL_DELEGATION_TARGETS } from "./config";
 
 export const flashClient = createPublicClient({ transport: http(FLASH_RPC) });
 export const normalClient = createPublicClient({ transport: http(NORMAL_RPC) });
@@ -27,21 +27,18 @@ export async function accountPasskey(account: Hex): Promise<{ x: Hex; y: Hex }> 
 }
 
 // Our OndolAccount implementations (v1 superseded, v2 current). A 7702 account
-// delegated to either is one of ours; the designator is 0xef0100 + impl addr.
-const ONDOL_IMPLS = [
-  "0xc512b2b083a38aa75f20e947fec5ee22aa23bd69", // v2 current
-  "0xd9933befc6c6ff968c662c30c765ce9740ad8ec4", // v1 superseded
-];
-
 /** True if `address` is a live Ondol smart account on chain (Add existing
- *  account validation). Reads code twice: the public RPC can serve stale empty
- *  code right after activity, and a false negative here would wrongly reject a
- *  real account. */
+ *  account validation). The 7702 designator is 0xef0100 + the delegation target,
+ *  which for a current account is the PROXY and for a legacy account a V1/V2
+ *  impl — the valid set is derived from deployments (ONDOL_DELEGATION_TARGETS),
+ *  so it can't drift and reject proxy-fronted accounts. Reads code twice: the
+ *  public RPC can serve stale empty code right after activity, and a false
+ *  negative here would wrongly reject a real account. */
 export async function isOndolAccount(address: Hex): Promise<boolean> {
   const check = async () => {
     const code = (await normalClient.getCode({ address }))?.toLowerCase() ?? "0x";
     if (!code.startsWith("0xef0100")) return false;
-    return ONDOL_IMPLS.includes("0x" + code.slice(8));
+    return ONDOL_DELEGATION_TARGETS.includes("0x" + code.slice(8));
   };
   return (await check()) || (await check());
 }

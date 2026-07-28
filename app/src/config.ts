@@ -34,6 +34,19 @@ export const ARISE_ADDRESS = hex(deployments.ariseModule);
 export const ONDOL_PROXY = hex(deployments.ondolProxy);
 export const ONDOL_V3_IMPL = hex(deployments.ondolAccountV3Impl);
 export const ONDOL_V2_IMPL = hex(deployments.ondolAccountV2Impl);
+export const ONDOL_V1_IMPL = hex(deployments.ondolAccountImpl);
+
+// Valid 7702 delegation designators for a Suho account (used by "add existing
+// account" validation). A current account delegates to the PROXY; legacy
+// accounts delegate straight to a V1/V2 impl. Derived from deployments so this
+// can never drift the way the old hardcoded impl list did — which rejected every
+// proxy-fronted account. Lowercased for comparison against the code designator.
+export const ONDOL_DELEGATION_TARGETS: readonly string[] = [
+  ONDOL_PROXY,
+  ONDOL_V3_IMPL,
+  ONDOL_V2_IMPL,
+  ONDOL_V1_IMPL,
+].map((a) => a.toLowerCase());
 
 export const LS_ACCOUNT = "suho.account";
 export const LS_ACCOUNTS = "suho.accounts";
