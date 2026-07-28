@@ -20,6 +20,7 @@ export function Card({ status }: { status: Status }) {
   const [editing, setEditing] = useState(false);
   const [fields, setFields] = useState<CardFields>({ displayName: "", contact: "", remarks: "" });
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
+  const [syncing, setSyncing] = useState(false);
   const toast = useToast();
 
   const load = async () => {
@@ -27,6 +28,22 @@ export function Card({ status }: { status: Status }) {
       setInfo(await api.card(requireActiveAccount()));
     } catch (e) {
       setPhase({ k: "error", message: humanError(e).text });
+    }
+  };
+  // After a create/update the tx is only PRECONFIRMED when executeWithPasskey
+  // resolves, but the card is read from EAS through the guardian's indexer, which
+  // lags a few seconds. Poll until the expected version is queryable so the new
+  // card/version appears without a manual refresh; always reflect the latest read.
+  const loadUntilVersion = async (targetVersion: number) => {
+    for (let i = 0; i < 12; i++) {
+      try {
+        const fresh = await api.card(requireActiveAccount());
+        setInfo(fresh);
+        if (fresh.current && (fresh.current.version ?? 0) >= targetVersion) return;
+      } catch {
+        // transient RPC/indexer hiccup — keep polling
+      }
+      await new Promise((r) => setTimeout(r, 1000));
     }
   };
   useEffect(() => {
@@ -53,7 +70,9 @@ export function Card({ status }: { status: Status }) {
       });
       setPhase({ k: "idle" });
       setEditing(false);
-      await load();
+      setSyncing(true);
+      await loadUntilVersion(nextV);
+      setSyncing(false);
     } catch (e) {
       if (isUserCancel(e)) {
         h.t?.dismiss();
@@ -182,6 +201,11 @@ export function Card({ status }: { status: Status }) {
             {phase.k === "signing" && (
               <div className="status-line">
                 <Spinner /> Confirm with your passkey…
+              </div>
+            )}
+            {syncing && (
+              <div className="status-line">
+                <Spinner /> Syncing the new version…
               </div>
             )}
             {phase.k === "error" && <div className="errbox">{phase.message}</div>}
