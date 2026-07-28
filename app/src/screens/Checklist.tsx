@@ -4,7 +4,7 @@ import { Check, Copy } from "lucide-react";
 import type { Hex } from "viem";
 import { api, type Status } from "../api";
 import { executeWithPasskey, signGateChallenge } from "../execute";
-import { activeAccount } from "../config";
+import { requireActiveAccount } from "../config";
 import { Seal, Spinner, fmtEth } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { humanError, isUserCancel } from "../errors";
@@ -34,7 +34,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
   const [recErr, setRecErr] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
 
-  const account = activeAccount();
+  const account = requireActiveAccount();
   const funded = BigInt(status.balance) > 0n;
   const verified = status.isVerified;
   const named = status.upId !== null;

@@ -51,7 +51,7 @@ function stepState(stage: Stage, i: number): "done" | "active" | "todo" {
   return "todo";
 }
 
-export function Arise({ refresh }: { refresh: () => void }) {
+export function Arise({ refresh, onDone }: { refresh: () => void; onDone?: () => void }) {
   const [stage, setStage] = useState<Stage>({ k: "identify" });
   const [busy, setBusy] = useState<string | null>(null);
   // Prefill with the active account only when it's a real, non-demo account
@@ -394,6 +394,11 @@ export function Arise({ refresh }: { refresh: () => void }) {
                   </a>{" "}
                   {stage.ms > 0 && <span className="timing">· confirmed in {(stage.ms / 1000).toFixed(1)}s</span>}
                 </p>
+                {onDone && (
+                  <button className="primary wide" style={{ marginTop: 16 }} onClick={onDone}>
+                    Open wallet
+                  </button>
+                )}
               </div>
 
               {/* R5: prove-it as two side-by-side L1 cards */}

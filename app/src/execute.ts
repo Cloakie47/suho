@@ -2,7 +2,7 @@ import type { Hex } from "viem";
 import { api } from "./api";
 import { accountNonce, computeChallenge, flashClient, isUpgradeable, watchReceipt, type Call } from "./chain";
 import { assertWithPasskey, type AssertionPayload } from "./webauthn";
-import { activeAccount, storedCredential } from "./config";
+import { requireActiveAccount, storedCredential } from "./config";
 import { fmtEth } from "./ui";
 
 /** Thrown by assertAffordable when the account can't cover value + gas cap. It
@@ -69,7 +69,7 @@ export async function executeWithPasskey(
   otpCode = "",
   hooks?: ExecuteHooks,
 ): Promise<{ txHash: Hex; preconfMs: number }> {
-  const account = activeAccount();
+  const account = requireActiveAccount();
   const credentialId = storedCredential();
   if (!credentialId) throw new Error("No passkey linked on this device. Visit Upgrade first.");
   const [nonce, maxGasPayment] = await Promise.all([accountNonce(account), capForAccount(account)]);

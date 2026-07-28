@@ -16,7 +16,7 @@ import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { capForAccount, assertAffordable, InsufficientFundsError } from "../execute";
 import { assertWithPasskey } from "../webauthn";
-import { activeAccount, isLegacyDemo, storedCredential, LARGE_SEND_THRESHOLD_WEI } from "../config";
+import { requireActiveAccount, isLegacyDemo, storedCredential, LARGE_SEND_THRESHOLD_WEI } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
@@ -334,8 +334,8 @@ export function Send({
     // Affordability preflight (value + gas reimbursement cap) with a clear
     // message BEFORE the hold-to-confirm or passkey prompt.
     try {
-      const cap = await capForAccount(activeAccount());
-      await assertAffordable(activeAccount(), [{ target: recipient.address, value, data: "0x" }], cap);
+      const cap = await capForAccount(requireActiveAccount());
+      await assertAffordable(requireActiveAccount(), [{ target: recipient.address, value, data: "0x" }], cap);
     } catch (e) {
       if (e instanceof InsufficientFundsError) {
         setPhase({ k: "error", message: e.human });
@@ -360,17 +360,17 @@ export function Send({
       setPhase({ k: "signing" });
       const calls: Call[] = [{ target: recipient.address, value, data: "0x" }];
       const [nonce, maxGasPayment] = await Promise.all([
-        accountNonce(activeAccount()),
-        capForAccount(activeAccount()),
+        accountNonce(requireActiveAccount()),
+        capForAccount(requireActiveAccount()),
       ]);
-      const challenge = computeChallenge(activeAccount(), nonce, calls, maxGasPayment);
+      const challenge = computeChallenge(requireActiveAccount(), nonce, calls, maxGasPayment);
       const webauthn = await assertWithPasskey(credentialId, challenge); // the one prompt
       setPhase({ k: "inflight" });
       handle = toast.begin(`Sending ${amount} ETH to ${recipient.display}…`);
       const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
-        activeAccount(),
+        requireActiveAccount(),
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
         "", // no OTP: the guard allows a confirmed large unverified send on passkey authority
         webauthn,

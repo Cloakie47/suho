@@ -1,6 +1,6 @@
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { api } from "./api";
-import { activeAccount, EAS_ADDRESS, EXPLORER } from "./config";
+import { requireActiveAccount, EAS_ADDRESS, EXPLORER } from "./config";
 
 /** Activity feed (R2): the wallet's real transactions, read straight from the
  *  explorer API in the browser (CORS `*` verified) — presentation-only data,
@@ -56,7 +56,7 @@ async function identify(addr: Hex): Promise<{ name: string | null; verified: boo
 let cache: { items: ActivityItem[]; at: number; account: string } | null = null;
 
 export async function fetchActivity(): Promise<ActivityItem[]> {
-  const account = activeAccount();
+  const account = requireActiveAccount();
   if (cache && cache.account === account && Date.now() - cache.at < 30_000) return cache.items;
 
   const res = await fetch(

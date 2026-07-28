@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, GuardianError, type CardInfo, type Status } from "../api";
 import { buildCardCalls, type CardFields } from "../card";
 import { executeWithPasskey } from "../execute";
-import { activeAccount } from "../config";
+import { requireActiveAccount } from "../config";
 import { Spinner, shortAddr } from "../ui";
 import { VCard, CardHistory } from "../vcard";
 import { useToast, type TxToast } from "../toast";
@@ -24,7 +24,7 @@ export function Card({ status }: { status: Status }) {
 
   const load = async () => {
     try {
-      setInfo(await api.card(activeAccount()));
+      setInfo(await api.card(requireActiveAccount()));
     } catch (e) {
       setPhase({ k: "error", message: humanError(e).text });
     }
@@ -85,7 +85,7 @@ export function Card({ status }: { status: Status }) {
         <p className="eyebrow">ATTESTED IDENTITY</p>
         <h1 className="screen-title">Suho Card</h1>
         <p className="muted" style={{ margin: "6px 0 0" }}>
-          {status.upId ? `${status.upId}.up.id` : shortAddr(activeAccount())}&rsquo;s card
+          {status.upId ? `${status.upId}.up.id` : shortAddr(requireActiveAccount())}&rsquo;s card
         </p>
       </div>
 
@@ -100,7 +100,7 @@ export function Card({ status }: { status: Status }) {
               <>
                 <VCard
                   card={info.current}
-                  address={activeAccount()}
+                  address={requireActiveAccount()}
                   upId={status.upId}
                   verified={status.isVerified}
                 />
@@ -111,8 +111,8 @@ export function Card({ status }: { status: Status }) {
                     </button>
                     <div className="muted" style={{ marginTop: 10, fontSize: "0.8rem" }}>
                       Share the read-only view:{" "}
-                      <a href={`#/verify/${activeAccount()}`} target="_blank">
-                        /verify/{shortAddr(activeAccount())}
+                      <a href={`#/verify/${requireActiveAccount()}`} target="_blank">
+                        /verify/{shortAddr(requireActiveAccount())}
                       </a>
                     </div>
                   </div>

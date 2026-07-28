@@ -57,10 +57,19 @@ export const ONDOL_DELEGATION_TARGETS: readonly string[] = [
 export const LS_ACCOUNT = "suho.account";
 export const LS_ACCOUNTS = "suho.accounts";
 
-/** The account this browser session acts for: onboarded account, or the demo
- *  account on the legacy path. Only ADDRESSES are stored. Never any key. */
-export function activeAccount(): `0x${string}` {
-  return (localStorage.getItem(LS_ACCOUNT) as `0x${string}`) ?? DEMO_ACCOUNT;
+/** The account this browser session acts for, or null on a truly fresh session
+ *  with nothing chosen. Only ADDRESSES are stored, never any key. There is NO
+ *  fallback to the demo account: a fresh visitor has no account and must onboard,
+ *  recover, or explicitly pick the demo (which sets it via setActiveAccount). */
+export function activeAccount(): `0x${string}` | null {
+  return localStorage.getItem(LS_ACCOUNT) as `0x${string}` | null;
+}
+/** For shell code that only runs once an account is selected (behind the
+ *  onboarded gate). Throws only on a programming error — never a user path. */
+export function requireActiveAccount(): `0x${string}` {
+  const a = activeAccount();
+  if (!a) throw new Error("No account selected on this device.");
+  return a;
 }
 export function setActiveAccount(address: string): void {
   localStorage.setItem(LS_ACCOUNT, address);
@@ -70,7 +79,8 @@ export function hasAccount(): boolean {
   return localStorage.getItem(LS_ACCOUNT) !== null;
 }
 export function isLegacyDemo(): boolean {
-  return activeAccount().toLowerCase() === DEMO_ACCOUNT.toLowerCase();
+  const a = activeAccount();
+  return a !== null && a.toLowerCase() === DEMO_ACCOUNT.toLowerCase();
 }
 
 /** Accounts this device knows (skill v2: there is no logout, there are
@@ -108,7 +118,8 @@ export function forgetAccount(address: string): void {
  *  an unmapped account reads null and must be relinked (chain-verified). */
 const credKey = (a: string) => `suho.credential.${a.toLowerCase()}`;
 export function storedCredential(): string | null {
-  return credentialFor(activeAccount());
+  const a = activeAccount();
+  return a ? credentialFor(a) : null;
 }
 export function credentialFor(address: string): string | null {
   return localStorage.getItem(credKey(address));

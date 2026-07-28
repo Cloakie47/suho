@@ -65,7 +65,7 @@ function AccountSwitcher({
   const [addErr, setAddErr] = useState<string | null>(null);
   const [ioMsg, setIoMsg] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
-  const current = activeAccount().toLowerCase();
+  const current = activeAccount()?.toLowerCase() ?? "";
   const hasDemo = knownAccounts().some((a) => a.toLowerCase() === DEMO_ACCOUNT.toLowerCase());
 
   const load = async () => {
@@ -447,6 +447,10 @@ export default function App() {
   const [onboarded, setOnboarded] = useState(() => hasAccount());
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
+  // Lost-device recovery from a fresh session: render Arise standalone (it asks
+  // for the account) WITHOUT the account-dependent shell, so no wallet is shown
+  // until the user has actually recovered one.
+  const [recovering, setRecovering] = useState(false);
 
   const switchRefresh = useCallback(() => {
     setStatus(null);
@@ -455,8 +459,15 @@ export default function App() {
   }, []);
 
   const refresh = useCallback(async () => {
+    // No account on this device yet (fresh session): don't fetch anyone's
+    // wallet — the app shows the empty onboarding state, not a populated one.
+    const account = activeAccount();
+    if (!account) {
+      setStatus(null);
+      return;
+    }
     try {
-      const s = await api.status(activeAccount());
+      const s = await api.status(account);
       // first-run routing: an already-upgraded account lands on Send, not Upgrade
       setStatus((prev) => {
         if (prev === null && s.isOndolAccount && s.initialized) setScreen("send");
@@ -501,20 +512,34 @@ export default function App() {
     );
   }
 
+  // Lost-device recovery from a fresh session: Arise standalone (no shell, so no
+  // wallet is shown until an account is actually recovered). On success it sets
+  // the recovered account active, then "Open wallet" enters the normal shell.
+  if (recovering) {
+    return (
+      <div className="main">
+        <div className="content">
+          <Arise
+            refresh={refresh}
+            onDone={() => {
+              setRecovering(false);
+              setOnboarded(true);
+              setScreen("send");
+              refresh();
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Phase O §O5: fresh browsers meet onboarding first; the demo account is the
   // clearly-labeled legacy path. "Add account" from the switcher re-enters it.
   if (!onboarded || addingAccount) {
     return (
       <Onboard
         paused={status?.sponsoredOnboardingPaused ?? false}
-        onRecover={() => {
-          // Lost-device recovery from a fresh browser: enter the app on the Arise
-          // screen, which asks for the account address itself (no account loaded).
-          setOnboarded(true);
-          setAddingAccount(false);
-          setScreen("arise");
-          refresh();
-        }}
+        onRecover={() => setRecovering(true)}
         onDone={() => {
           setStatus(null);
           setOnboarded(true);
