@@ -102,13 +102,33 @@ function ActivityIcon({ item }: { item: ActivityItem }) {
 function ActivityFeed({ bump }: { bump: number }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const countRef = useRef(0);
 
   useEffect(() => {
     let alive = true;
-    fetchActivity().then(
-      (v) => alive && setItems(v),
-      () => alive && setFailed(true),
-    );
+    // A send bumps `bump`, but the tx is only PRECONFIRMED then — the explorer
+    // that fetchActivity reads lags a few seconds. On a post-send refresh, poll
+    // until the feed grows past its pre-send count so the new tx appears without
+    // a manual refresh (same shape as the Card fix). On mount, one fetch.
+    const baseline = countRef.current;
+    const isPostSend = bump > 0;
+    const maxTries = isPostSend ? 6 : 1;
+    (async () => {
+      for (let i = 0; i < maxTries; i++) {
+        try {
+          const v = await fetchActivity();
+          if (!alive) return;
+          setItems(v);
+          setFailed(false);
+          countRef.current = v.length;
+          if (!isPostSend || v.length > baseline) return; // new tx indexed
+        } catch {
+          if (!alive) return;
+          setFailed(true);
+        }
+        if (i < maxTries - 1) await new Promise((r) => setTimeout(r, 1500));
+      }
+    })();
     return () => {
       alive = false;
     };
