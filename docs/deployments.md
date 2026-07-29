@@ -1,4 +1,4 @@
-# Suho deployments — GIWA Sepolia (chain ID 91342)
+# Suho deployments on GIWA Sepolia (chain ID 91342)
 
 Deployed 2026-07-20 with `evm_version = "osaka"` bytecode (solc 0.8.30); deployed
 and executed without incident. Deployer/issuer key: `DEPLOYER_*` in `.env`
@@ -7,20 +7,19 @@ and executed without incident. Deployer/issuer key: `DEPLOYER_*` in `.env`
 | Contract | Address | Explorer | Source verified |
 |---|---|---|---|
 | SuhoCodeAttester | `0x88645529532844C380b40AB68E335CC7a8a0f63B` | [view](https://sepolia-explorer.giwa.io/address/0x88645529532844C380b40AB68E335CC7a8a0f63B) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolTransferGuard | `0x106953DB14B1183378976E128AE5cd40C4b493d2` | [view](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) | ✅ 2026-07-21 (Blockscout, Pass) |
+| OndolTransferGuard (current) | `0x4E395754311359Ac12a1005C69eac49E17046eBE` | [view](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) | ✅ 2026-07-28 (Blockscout, Pass) |
+| OndolTransferGuard (superseded) | `0x106953DB14B1183378976E128AE5cd40C4b493d2` | [view](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) | ✅ 2026-07-21 (Blockscout, Pass) |
 | AriseModule | `0x827375200CF4595f71b09497A65BAF10Ca907466` | [view](https://sepolia-explorer.giwa.io/address/0x827375200CF4595f71b09497A65BAF10Ca907466) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolAccount (impl, v1 — superseded) | `0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4` | [view](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolAccountV2 (impl — superseded, still supported for pinned accounts) | `0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69` | [view](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolProxy (upgradeable 7702 target — current) | `0x5641D0D42bCD6450BE30077998Fe64F263A4887B` | [view](https://sepolia-explorer.giwa.io/address/0x5641D0D42bCD6450BE30077998Fe64F263A4887B) | ✅ 2026-07-24 (Blockscout, Pass) |
-| OndolAccountV3 (impl — current) | `0xff164E70038EB91c342981d95f1f59d04499399E` | [view](https://sepolia-explorer.giwa.io/address/0xff164E70038EB91c342981d95f1f59d04499399E) | ✅ 2026-07-24 (Blockscout, Pass) |
+| OndolAccount (impl, v1, superseded) | `0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4` | [view](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) | ✅ 2026-07-21 (Blockscout, Pass) |
+| OndolAccountV2 (impl, superseded, still supported for pinned accounts) | `0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69` | [view](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) | ✅ 2026-07-21 (Blockscout, Pass) |
+| OndolProxy (upgradeable 7702 target, current) | `0x5641D0D42bCD6450BE30077998Fe64F263A4887B` | [view](https://sepolia-explorer.giwa.io/address/0x5641D0D42bCD6450BE30077998Fe64F263A4887B) | ✅ 2026-07-24 (Blockscout, Pass) |
+| OndolAccountV3 (impl, current) | `0xff164E70038EB91c342981d95f1f59d04499399E` | [view](https://sepolia-explorer.giwa.io/address/0xff164E70038EB91c342981d95f1f59d04499399E) | ✅ 2026-07-24 (Blockscout, Pass) |
 
 Suho code schema UID (registered on the SchemaRegistry predeploy, resolver 0,
-revocable): `0x8f05c451eccf1fe63ba0518ad1f3338b92b7516eec60ea8ea9e528b20e49a3cf`
-— schema `bytes32 codeHash, string domain`.
+revocable): `0x8f05c451eccf1fe63ba0518ad1f3338b92b7516eec60ea8ea9e528b20e49a3cf`, schema `bytes32 codeHash, string domain`.
 
 Suho Card schema UID (registered 2026-07-21, block 31278333, resolver 0,
-revocable): `0x1eb6f3a6fefafeb323d44868d7c4c97ee64c981d9c47c5f028154a29dba0bdaa`
-— schema `string displayName, string contact, string remarks`. Card
+revocable): `0x1eb6f3a6fefafeb323d44868d7c4c97ee64c981d9c47c5f028154a29dba0bdaa`, schema `string displayName, string contact, string remarks`. Card
 attestations are self-attested by the Ondol account via execute() (passkey-
 signed); versions chain through refUID, updates revoke the prior version.
 
