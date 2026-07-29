@@ -1,16 +1,19 @@
 # Contracts and addresses
 
-All contracts are live on GIWA Sepolia (chain id 91342). All four Suho contracts are source-verified on the explorer.
+All contracts are live on GIWA Sepolia (chain id 91342). All Suho contracts are source-verified on the explorer.
 
 ## Suho contracts
 
 | Contract | Address |
 | --- | --- |
 | SuhoCodeAttester | [`0x88645529532844C380b40AB68E335CC7a8a0f63B`](https://sepolia-explorer.giwa.io/address/0x88645529532844C380b40AB68E335CC7a8a0f63B) |
-| OndolTransferGuard | [`0x106953DB14B1183378976E128AE5cd40C4b493d2`](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) |
+| OndolTransferGuard (current) | [`0x4E395754311359Ac12a1005C69eac49E17046eBE`](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) |
+| OndolTransferGuard (superseded) | [`0x106953DB14B1183378976E128AE5cd40C4b493d2`](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) |
 | AriseModule | [`0x827375200CF4595f71b09497A65BAF10Ca907466`](https://sepolia-explorer.giwa.io/address/0x827375200CF4595f71b09497A65BAF10Ca907466) |
+| OndolProxy (current account front) | [`0x5641D0D42bCD6450BE30077998Fe64F263A4887B`](https://sepolia-explorer.giwa.io/address/0x5641D0D42bCD6450BE30077998Fe64F263A4887B) |
+| OndolAccountV3 impl (current, behind the proxy) | [`0xff164E70038EB91c342981d95f1f59d04499399E`](https://sepolia-explorer.giwa.io/address/0xff164E70038EB91c342981d95f1f59d04499399E) |
+| OndolAccountV2 (legacy, direct delegation) | [`0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69`](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) |
 | OndolAccount v1 (superseded) | [`0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4`](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) |
-| OndolAccountV2 (current) | [`0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69`](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) |
 
 ## GIWA contracts used
 

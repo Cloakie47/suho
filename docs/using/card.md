@@ -8,7 +8,7 @@ The Suho Card is an attested identity card. Your account signs it. The seal atte
 - The red seal, if your account is Dojang-verified.
 - Your up.id name.
 - A version number and the attestation id.
-- A QR code linking to your account on the explorer.
+- A QR code linking to the shareable read-only verify view for the card.
 
 The card renders at credit-card proportion. It carries one honest line in small print: identity is verified by Dojang; card fields are self-declared by the verified owner. The seal attests the human. The fields are their claims. Do not blur the two.
 

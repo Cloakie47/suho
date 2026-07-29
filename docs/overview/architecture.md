@@ -29,7 +29,7 @@ The account challenge is `keccak256(account, chainId, nonce, calls)`. A signatur
 
 ## The guardian relays
 
-The guardian holds a relayer key that pays gas, and the issuer key that mints recovery codes (large transfers use no code — see [Send and the guard](/using/send)). It exposes a small REST surface: onboard, relay, recovery (email-gated), arise, verify-me, claim-name, status, directory, and card. The old public issuer portal is retired.
+The guardian holds a relayer key that pays gas, and the issuer key that mints recovery codes (large transfers use no code, see [Send and the guard](/using/send)). It exposes a small REST surface: onboard, relay, recovery (email-gated), arise, verify-me, claim-name, status, directory, and card. The old public issuer portal is retired.
 
 The guardian never receives key material on any endpoint. A request-body check rejects anything key-shaped before any handler runs.
 

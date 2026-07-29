@@ -1,85 +1,70 @@
 # Deploying
 
-Suho deploys in two halves. The static half (landing and docs) goes to a static host. The guardian goes to a Node host. The app is a static bundle that points at the deployed guardian.
+Suho deploys in three parts. The static landing and docs and the app static bundle go to Cloudflare Pages. The guardian goes to a Node host on Railway. The app is a static bundle that points at the deployed guardian over REST.
 
 Everything cross-origin is env-configurable, so nothing is hardcoded to one domain.
 
 ## What deploys where
 
-| Piece | Host | State |
+| Piece | Host | Live at |
 | --- | --- | --- |
-| Landing + docs (`site/`) | Vercel (static) | Live now |
-| App (`app/`) | Vercel (static) | Prepped; deploys after the contract phase |
-| Guardian (`guardian/`) | Railway (Node) | Prepped; deploys after the contract phase |
+| Landing + docs (`site/`) | Cloudflare Pages (static) | `https://suhowallet.com` |
+| App (`app/`) | Cloudflare Pages (static) | `https://app.suhowallet.com` |
+| Guardian (`guardian/`) | Railway (Node) | `https://api.suhowallet.com` |
 
-The app and guardian wait for the contract phase because they wire to the accounts it ships. The landing and docs do not, so they go up first for a public URL.
+Order matters: deploy the guardian first and confirm `https://api.suhowallet.com/health` responds, then build the app (its guardian URL is baked in at build time), then the landing and docs.
 
-## Landing + docs (static)
+## Landing + docs (Cloudflare Pages, static)
 
 The landing is static in `site/`. The docs build into `site/docs`, so both serve from one folder and one deploy.
 
-```bash
-cd docs
-npm install
-SUHO_APP_URL=https://your-domain/ npm run docs:build   # outputs to ../site/docs
-```
+- **Build command:** `cd docs && npm ci && npm run docs:build && cd ../site && node inject-config.mjs`
+- **Build output directory:** `site`
+- **Env:** `SUHO_APP_URL=https://app.suhowallet.com` (read by both the docs "Launch app" link and the landing's Launch-app CTA), `NODE_VERSION=20`.
 
-`SUHO_APP_URL` sets the docs "Launch app" link at build time. Until the app is deployed, point it at the landing root. The built `site/docs` is committed, so the host serves what is in the repo.
+`docs:build` compiles VitePress into `../site/docs` (base `/docs/`), then `inject-config.mjs` rewrites the landing's Launch-app URL from the localhost dev default to `SUHO_APP_URL`. `cleanUrls: false` keeps the explicit `.html` links working on a plain static host, so `/` serves the landing and `/docs/*.html` serves the docs with no rewrite rules.
 
-Vercel config lives in `vercel.json` at the repo root:
+## App (Cloudflare Pages, static bundle)
 
-```json
-{
-  "framework": null,
-  "buildCommand": null,
-  "outputDirectory": "site",
-  "cleanUrls": false
-}
-```
+The app reads these build-time variables. Point them at production:
 
-`cleanUrls: false` keeps the explicit `.html` links working on a plain static host. No build runs on the host; it serves `site/` as-is.
-
-## App (static bundle)
-
-The app reads two build-time variables:
-
-| Variable | Purpose | Dev default |
+| Variable | Value | Dev default |
 | --- | --- | --- |
-| `VITE_GUARDIAN_URL` | The deployed guardian origin | `http://localhost:8787` |
-| `VITE_DOCS_URL` | The first docs content page | `http://localhost:8899/docs/overview/what-is-suho.html` |
+| `VITE_GUARDIAN_URL` | `https://api.suhowallet.com` | `http://localhost:8787` |
+| `VITE_RP_ID` | `suhowallet.com` | `localhost` |
+| `VITE_APP_URL` | `https://app.suhowallet.com` | current origin |
+| `VITE_LANDING_URL` | `https://suhowallet.com/` | `http://localhost:8899/` |
+| `VITE_DOCS_URL` | `https://suhowallet.com/docs/overview/what-is-suho.html` | localhost docs |
 
-```bash
-cd app
-npm install
-VITE_GUARDIAN_URL=https://your-guardian VITE_DOCS_URL=https://your-domain/docs/overview/what-is-suho.html npm run build
-```
+- **Build command:** `cd app && npm ci && npm run build`
+- **Build output directory:** `app/dist`
+- `VITE_RP_ID` is the WebAuthn Relying Party ID passkeys bind to. It must be the app's registrable domain, so a passkey created on `app.suhowallet.com` sets `suhowallet.com`. A mismatch makes every passkey create and sign fail. `VITE_APP_URL` is used to build the card QR link to the shareable `/verify` view.
 
-The output in `app/dist` is a static bundle. It talks to the guardian over REST, so it needs the guardian to be up and to allow the app's origin (see CORS below).
+The output in `app/dist` is a static bundle. It talks to the guardian over REST, so the guardian must be up and must allow the app's origin (see CORS below). `VITE_*` values are baked at build time, so changing one needs a rebuild, not just an env change.
 
-## Guardian (Node)
+## Guardian (Railway, Node)
+
+Railway root directory is `guardian`; build is `npm install`; start is `npm start` (it runs TypeScript directly through `tsx`, no compile step). Attach the Postgres service so `DATABASE_URL` is injected, and leave `DATABASE_PUBLIC_URL` unset so the internal host is used.
 
 The guardian reads these from the environment. Keys come from `.env` locally, from host variables in production. Never commit `.env`.
 
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | Listen port. Railway injects it; falls back to 8787 locally. |
-| `SUHO_CORS_ORIGINS` | Comma-separated origin allowlist, e.g. `https://your-domain`. Unset means open (`*`), which is the dev default. |
-| `SUHO_RELAYER_FLOOR_WEI` | Below this relayer balance, sponsored onboarding pauses (reimbursed ops continue). `0` or unset disables the floor. |
-| `SUHO_ONBOARD_DAILY_CAP` | Max sponsored onboardings per UTC day (default 200). |
-| `DEPLOYER_PRIVATE_KEY` | Relayer key (pays gas) and SuhoCodeAttester issuer. Testnet only. |
+| `SUHO_CORS_ORIGINS` | Origin allowlist, set to `https://app.suhowallet.com`. Unset means open (`*`), the dev default. |
+| `DATABASE_URL` | Postgres connection. Injected by attaching the Railway Postgres service (internal host). |
+| `DEPLOYER_PRIVATE_KEY` | Relayer key (pays gas) and SuhoCodeAttester issuer (mints recovery codes). Testnet only. |
 | `ALICE_PRIVATE_KEY` | Legacy demo EOA key, held only for the one-time 7702 upgrade. Testnet only. |
+| `RESEND_API_KEY` | Sends recovery and confirmation email through Resend. |
+| `SUHO_EMAIL_ENC_KEY` | Encrypts recovery emails at rest. Must stay constant, or stored emails become undecryptable. |
+| `SUHO_EMAIL_FROM` | Sender, e.g. `Suho <no-reply@suhowallet.com>` (a Resend-verified domain). |
+| `SUHO_OPS_TOKEN` | Bearer token for the `/ops` monitoring endpoint. |
+| `SUHO_RELAYER_FLOOR_WEI` | Below this relayer balance, sponsored onboarding pauses; reimbursed ops continue. `0` or unset disables it. |
+| `SUHO_ONBOARD_DAILY_CAP` | Max sponsored onboardings per UTC day (default 200). |
 
 `GET /health` reports the live relayer balance, floor state, onboarding counts, relays served, and chain head with no secrets. See [Costs and limits](/developers/costs) for the reimbursement model and the sponsored-onboarding caps.
 
-```bash
-cd guardian
-npm install
-PORT=8787 SUHO_CORS_ORIGINS=https://your-domain npm run dev
-```
-
-Set `SUHO_CORS_ORIGINS` to the app's real origin in production. Only listed origins are echoed back; every other origin is refused at the browser. Leaving it open is a dev convenience, not a production setting.
-
-On boot the guardian logs its port and the active CORS mode, so a misconfigured allowlist is visible in the first line of output.
+Set `SUHO_CORS_ORIGINS` to the app's real origin in production. Only listed origins are echoed back; every other origin is refused at the browser. Leaving it open is a dev convenience, not a production setting. On boot the guardian logs its port, the active CORS mode, and whether the database schema is ready, so a misconfiguration is visible in the first lines of output.
 
 ## Never commit keys
 
