@@ -54,6 +54,7 @@ export default defineConfig({
       { text: "Using Suho", link: "/using/create-account" },
       { text: "Under the hood", link: "/internals/ondol-account" },
       { text: "Developers", link: "/developers/contracts" },
+      { text: "Roadmap", link: "/roadmap" },
       { text: "Launch app", link: APP_URL, target: "_blank" },
     ],
     sidebar: [
@@ -93,6 +94,10 @@ export default defineConfig({
           { text: "Running locally", link: "/developers/running" },
           { text: "Deploying", link: "/developers/deploying" },
         ],
+      },
+      {
+        text: "Roadmap",
+        items: [{ text: "Roadmap", link: "/roadmap" }],
       },
     ],
     socialLinks: [{ icon: "github", link: "https://github.com/Cloakie47/suho" }],
