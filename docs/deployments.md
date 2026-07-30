@@ -7,7 +7,7 @@ and executed without incident. Deployer/issuer key: `DEPLOYER_*` in `.env`
 | Contract | Address | Explorer | Source verified |
 |---|---|---|---|
 | SuhoCodeAttester | `0x88645529532844C380b40AB68E335CC7a8a0f63B` | [view](https://sepolia-explorer.giwa.io/address/0x88645529532844C380b40AB68E335CC7a8a0f63B) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolTransferGuard (current) | `0x4E395754311359Ac12a1005C69eac49E17046eBE` | [view](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) | ✅ 2026-07-28 (Blockscout, Pass) |
+| OndolTransferGuard (current) | `0x4E395754311359Ac12a1005C69eac49E17046eBE` | [view](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) | ✅ 2026-07-27 (Blockscout, Pass) |
 | OndolTransferGuard (superseded) | `0x106953DB14B1183378976E128AE5cd40C4b493d2` | [view](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) | ✅ 2026-07-21 (Blockscout, Pass) |
 | AriseModule | `0x827375200CF4595f71b09497A65BAF10Ca907466` | [view](https://sepolia-explorer.giwa.io/address/0x827375200CF4595f71b09497A65BAF10Ca907466) | ✅ 2026-07-21 (Blockscout, Pass) |
 | OndolAccount (impl, v1, superseded) | `0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4` | [view](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) | ✅ 2026-07-21 (Blockscout, Pass) |
