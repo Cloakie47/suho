@@ -54,6 +54,19 @@ const SENTENCES: Record<string, string> = {
   AlreadyNamed: "This account already has a name.",
   NameTaken: "That name is taken. Try another.",
   InvalidLabel: "Names use a to z, 0 to 9, and a dash. Minimum 3 characters.",
+  // Phase M: transaction-attached messages (memos + return requests).
+  AnchorUnverified: "Couldn't confirm that transaction on-chain. Nothing was saved.",
+  SenderNotVerified: "Only a verified account can request a return. Get verified first.",
+  TokenNotAllowed: "Return requests are only for ETH right now.",
+  AlreadyRequested: "You've already requested a return for this transfer.",
+  ReminderTooSoon: "You can send one reminder, and only after a week.",
+  MessageTooLong: "That note is too long. Shorten it and try again.",
+  ReturnUnverified: "Couldn't confirm the return transaction on-chain.",
+  ReturnTokenMismatch: "The return used a different token than the original transfer.",
+  ReturnAmountMismatch: "The return amount didn't match the original transfer.",
+  MessageFailed: "Couldn't save that just now. Try again.",
+  InvalidRequest: "Something about that request wasn't right. Try again.",
+  NotFound: "That message is no longer available.",
 };
 
 export function humanError(err: unknown): { text: string; raw: string } {

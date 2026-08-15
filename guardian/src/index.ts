@@ -58,6 +58,7 @@ import { emailHash, decryptEmail } from "./crypto.js";
 import { randomInt, randomBytes } from "node:crypto";
 import { getDirectory, prewarmDirectory } from "./directory.js";
 import { getCard, prewarmCards } from "./card.js";
+import { registerMessages } from "./messages.js";
 
 // P4: demo readiness — alice must cover one verified send (0.0002) plus one OTP
 // send at threshold+0.001, with 30% margin. Execute gas is relayer-paid, so only
@@ -1015,6 +1016,12 @@ app.get("/ops", async (req, res) => {
     res.status(500).json({ error: String(e) });
   }
 });
+
+// ---- Phase M: transaction-attached messages (memos + return requests) ----
+// Registered here so the message routes can reuse the guardian's Dojang check
+// (verifiedBy) and error sink (noteError). All anchoring, passkey gating, and
+// at-rest encryption live in ./messages + ./txverify + ./db.
+registerMessages(app, { verifiedBy, noteError });
 
 // PORT from env for hosted deploys (Railway injects it); 8787 for local dev.
 const PORT = Number(process.env.PORT) || 8787;

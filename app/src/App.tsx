@@ -4,6 +4,7 @@ import {
   BookUser,
   IdCard,
   KeyRound,
+  ScrollText,
   Check,
   Copy,
   Download,
@@ -30,6 +31,8 @@ import {
 import { accountPasskey, isOndolAccount } from "./chain";
 import { relinkPasskey } from "./webauthn";
 import { humanError } from "./errors";
+import { lockMessages } from "./messages";
+import { cachedStatus, peekStatus } from "./api";
 import { Onboard } from "./screens/Onboard";
 
 interface KnownRow {
@@ -70,16 +73,31 @@ function AccountSwitcher({
 
   const load = async () => {
     const list = knownAccounts();
-    const out: KnownRow[] = [];
-    for (const address of list) {
-      try {
-        const s = await api.status(address);
-        out.push({ address, upId: s.upId, verified: s.isVerified, credentialId: credentialFor(address) });
-      } catch {
-        out.push({ address, upId: null, verified: false, credentialId: credentialFor(address) });
-      }
-    }
-    setRows(out);
+    // 1) Paint instantly from local data + any cached status — no waiting on RPC.
+    setRows(
+      list.map((address) => {
+        const cached = peekStatus(address);
+        return {
+          address,
+          upId: cached?.upId ?? null,
+          verified: cached?.isVerified ?? false,
+          credentialId: credentialFor(address),
+        };
+      }),
+    );
+    // 2) Refresh statuses in PARALLEL (was a serial per-account loop over the
+    //    rate-limited RPC — the reason the list was slow to appear).
+    const fresh = await Promise.all(
+      list.map(async (address) => {
+        try {
+          const s = await cachedStatus(address);
+          return { address, upId: s.upId, verified: s.isVerified, credentialId: credentialFor(address) };
+        } catch {
+          return { address, upId: null, verified: false, credentialId: credentialFor(address) };
+        }
+      }),
+    );
+    setRows(fresh);
   };
   useEffect(() => {
     load();
@@ -366,15 +384,17 @@ function AccountSwitcher({
 import { ErrNote, GithubMark, Seal, Spinner, fmtEth, shortAddr } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
+import { Activity } from "./screens/Activity";
 import { Arise } from "./screens/Arise";
 import { Directory } from "./screens/Directory";
 import { Card } from "./screens/Card";
 import { Verify } from "./screens/Verify";
 
-type Screen = "upgrade" | "send" | "directory" | "card" | "arise";
+type Screen = "upgrade" | "send" | "activity" | "directory" | "card" | "arise";
 
 const NAV: { key: Screen; label: string; icon: LucideIcon }[] = [
   { key: "send", label: "Send", icon: SendHorizontal },
+  { key: "activity", label: "Activity", icon: ScrollText },
   { key: "directory", label: "Directory", icon: BookUser },
   { key: "card", label: "Card", icon: IdCard },
   { key: "arise", label: "Arise", icon: KeyRound },
@@ -453,6 +473,7 @@ export default function App() {
   const [recovering, setRecovering] = useState(false);
 
   const switchRefresh = useCallback(() => {
+    lockMessages(); // drop the previous account's in-memory action session
     setStatus(null);
     setScreen("send");
     refresh();
@@ -588,6 +609,7 @@ export default function App() {
       {screen === "send" && (
         <Send status={status} refresh={refresh} prefillRecipient={prefillRecipient} />
       )}
+      {screen === "activity" && <Activity status={status} />}
       {screen === "directory" && (
         <Directory
           onSendTo={(name) => {

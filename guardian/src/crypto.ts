@@ -31,6 +31,30 @@ function subkey(info: string): Buffer {
 }
 const aesKey = () => subkey("suho/email/aes-256-gcm/v1");
 const macKey = () => subkey("suho/email/hmac-sha256/v1");
+// Phase M: transaction-attached message bodies at rest. A distinct HKDF subkey
+// (new `info`) so a message-body key is never the same secret as the email key,
+// even though both derive from the one master. See db.tx_messages.body_encrypted.
+const txmsgKey = () => subkey("suho/txmsg/aes-256-gcm/v1");
+
+/// AES-256-GCM primitive, key passed in. Output is `iv.tag.ciphertext`, each
+/// base64, with a fresh random 12-byte IV per call. Shared by the email and
+/// message helpers so the GCM plumbing lives in exactly one place.
+function gcmEncrypt(key: Buffer, plaintext: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString("base64")}.${tag.toString("base64")}.${ct.toString("base64")}`;
+}
+function gcmDecrypt(key: Buffer, blob: string): string {
+  const [ivB64, tagB64, ctB64] = blob.split(".");
+  if (!ivB64 || !tagB64 || !ctB64) throw new Error("malformed ciphertext");
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64"));
+  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString(
+    "utf8",
+  );
+}
 
 /// Trim + lowercase. Emails are treated case-insensitively so re-binding the
 /// same address in a different case is recognised as the same email.
@@ -45,20 +69,24 @@ export function emailHash(email: string): string {
   return createHmac("sha256", macKey()).update(normalizeEmail(email)).digest("hex");
 }
 
-/// AES-256-GCM. Output is `iv.tag.ciphertext`, each base64. A fresh random IV per
-/// call, so the same email encrypts to different ciphertext each time.
+/// AES-256-GCM. A fresh random IV per call, so the same email encrypts to
+/// different ciphertext each time.
 export function encryptEmail(email: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", aesKey(), iv);
-  const ct = Buffer.concat([cipher.update(normalizeEmail(email), "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${iv.toString("base64")}.${tag.toString("base64")}.${ct.toString("base64")}`;
+  return gcmEncrypt(aesKey(), normalizeEmail(email));
 }
 
 export function decryptEmail(blob: string): string {
-  const [ivB64, tagB64, ctB64] = blob.split(".");
-  if (!ivB64 || !tagB64 || !ctB64) throw new Error("malformed encrypted email");
-  const decipher = createDecipheriv("aes-256-gcm", aesKey(), Buffer.from(ivB64, "base64"));
-  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-  return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+  return gcmDecrypt(aesKey(), blob);
+}
+
+/// Phase M message bodies (memos, return-request text). Same AES-256-GCM as
+/// email at rest, but under the message subkey. Bodies are stored only as this
+/// ciphertext; the plaintext is returned solely to the two parties of the
+/// anchored tx and never logged.
+export function encryptMessage(body: string): string {
+  return gcmEncrypt(txmsgKey(), body);
+}
+
+export function decryptMessage(blob: string): string {
+  return gcmDecrypt(txmsgKey(), blob);
 }

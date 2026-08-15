@@ -30,6 +30,7 @@ const out = {
   ondolAccountV2Impl: d.ondolAccountV2Impl,
   ondolAccountImpl: d.ondolAccountImpl, // v1 (legacy) — a valid delegation target
   suhoCodeAttester: d.suhoCodeAttester,
+  suhoMemo: d.suhoMemo, // Phase M: on-chain memo log (batched into execute)
 };
 for (const [k, v] of Object.entries(out)) {
   if (v === undefined) throw new Error(`deployments is missing "${k}" — cannot sync app wiring`);

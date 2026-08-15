@@ -126,7 +126,62 @@ export const api = {
     req<{ entries: DirEntry[]; total: number; shown: number; scannedToBlock: string }>(
       `/directory?q=${encodeURIComponent(q)}${refresh ? "&refresh=1" : ""}`,
     ),
+  // ---- Phase M: return requests (memos are on-chain, read from events) ----
+  // Creating a request carries a content-bound passkey assertion (`sig`). Reads
+  // (inbox/sent) are PUBLIC — viewable by address, our public-for-now stance.
+  // Receiver actions present a short-lived bearer session (memory only).
+  msgReturnRequest: (account: Hex, txHash: Hex, body: string, sig: AssertionPayload) =>
+    req<{ ok: boolean; message?: TxMessageWire }>(
+      "/messages/return-request",
+      post({ account, txHash, body, sig }),
+    ),
+  msgChallenge: (account: Hex) => req<{ challenge: Hex }>(`/messages/challenge?account=${account}`),
+  msgSession: (account: Hex, sig: AssertionPayload) =>
+    req<{ token: string; expiresAt: number }>("/messages/session", post({ account, sig })),
+  msgInbox: (account: Hex) => req<{ items: TxMessageWire[] }>(`/messages/inbox?account=${account}`),
+  msgSent: (account: Hex) => req<{ items: TxMessageWire[] }>(`/messages/sent?account=${account}`),
+  msgRespond: (messageId: number, action: "decline" | "dismiss" | "block", token: string) =>
+    req<{ ok: boolean }>("/messages/respond", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ messageId, action }),
+    }),
+  // Public: the guardian verifies the return tx on-chain before marking.
+  msgMarkReturned: (messageId: number, returnTxHash: Hex) =>
+    req<{ ok: boolean }>("/messages/mark-returned", post({ messageId, returnTxHash })),
 };
+
+export interface TxMessageWire {
+  id: number;
+  kind: "return_request" | "reminder";
+  txHash: Hex;
+  from: Hex;
+  to: Hex;
+  /** "ETH" or a lowercased token address. */
+  token: string;
+  amountWei: string;
+  body: string;
+  status: "active" | "declined" | "dismissed" | "returned";
+  returnTxHash: Hex | null;
+  createdAt: string;
+}
+
+// Cached account status for the switcher: statuses change rarely, so a short TTL
+// cache turns "Accounts on this device" from N serial RPC round-trips into an
+// instant render (from cache/local) with fresh values filling in.
+const statusCache = new Map<string, { at: number; status: Status }>();
+export async function cachedStatus(address: string, ttlMs = 60_000): Promise<Status> {
+  const key = address.toLowerCase();
+  const hit = statusCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.status;
+  const s = await api.status(address);
+  statusCache.set(key, { at: Date.now(), status: s });
+  return s;
+}
+/** Synchronous peek at a cached status (no fetch) — for an instant first paint. */
+export function peekStatus(address: string): Status | undefined {
+  return statusCache.get(address.toLowerCase())?.status;
+}
 
 export interface DirEntry {
   name: string;

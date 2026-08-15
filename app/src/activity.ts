@@ -1,17 +1,29 @@
-import { decodeFunctionData, parseAbi, type Hex } from "viem";
+import { decodeFunctionData, parseAbi, parseAbiItem, type Hex } from "viem";
 import { api } from "./api";
-import { requireActiveAccount, EAS_ADDRESS, EXPLORER } from "./config";
+import { requireActiveAccount, EAS_ADDRESS, EXPLORER, SUHO_MEMO } from "./config";
+import { normalClient } from "./chain";
 
-/** Activity feed (R2): the wallet's real transactions, read straight from the
- *  explorer API in the browser (CORS `*` verified) — presentation-only data,
- *  no guardian or contract changes (R6). */
+/** Activity feed: the wallet's real transactions, read from the explorer API in
+ *  the browser, annotated with on-chain memos (SuhoMemo `Memo` events). Phase M
+ *  revision — memos are public chain data, read here, not from the guardian. */
 
 export const ARISE_MODULE = "0x827375200CF4595f71b09497A65BAF10Ca907466";
 
-const executeAbi = parseAbi([
+// Both account shapes: legacy V1/V2 execute (3-arg) and V3 execute (4-arg, with
+// the signed maxGasPayment). Their selectors DIFFER, so the old code that matched
+// only the 3-arg selector silently dropped every V3 send. Decode with whichever
+// matches; `calls[0]` (the transfer) is the first arg in both.
+const executeV2Abi = parseAbi([
   "struct Call { address target; uint256 value; bytes data; }",
   "function execute(Call[] calls, string otpCode, bytes webAuthnSig) payable",
 ]);
+const executeV3Abi = parseAbi([
+  "struct Call { address target; uint256 value; bytes data; }",
+  "function execute(Call[] calls, string otpCode, uint256 maxGasPayment, bytes webAuthnSig) payable",
+]);
+const EXECUTE_SELECTORS = ["0x156c0694", "0x60be62a3"]; // V1/V2, V3
+
+const memoEvent = parseAbiItem("event Memo(address indexed from, address indexed to, string text)");
 
 export interface ActivityItem {
   hash: Hex;
@@ -23,6 +35,8 @@ export interface ActivityItem {
   amountWei?: bigint;
   timestamp: string;
   explorer: string;
+  /** On-chain memo attached to this tx (public), if any. */
+  memo?: string;
 }
 
 interface ExplorerTx {
@@ -53,21 +67,59 @@ async function identify(addr: Hex): Promise<{ name: string | null; verified: boo
   }
 }
 
+function decodeCalls(input: Hex): { target: Hex; value: bigint; data: Hex }[] | null {
+  for (const abi of [executeV2Abi, executeV3Abi]) {
+    try {
+      const { functionName, args } = decodeFunctionData({ abi, data: input });
+      if (functionName !== "execute") continue;
+      return args[0] as { target: Hex; value: bigint; data: Hex }[];
+    } catch {
+      // try the other shape
+    }
+  }
+  return null;
+}
+
+/** On-chain memos to/from the account, indexed by (lowercased) tx hash. Reads
+ *  SuhoMemo `Memo` events over a bounded recent window (GIWA getLogs is unreliable
+ *  past ~100k blocks, so we stay under that). Public data, no auth. */
+async function fetchMemos(account: Hex): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!SUHO_MEMO || SUHO_MEMO === "0x") return out;
+  try {
+    const latest = await normalClient.getBlockNumber();
+    const fromBlock = latest > 90_000n ? latest - 90_000n : 0n;
+    const [asFrom, asTo] = await Promise.all([
+      normalClient.getLogs({ address: SUHO_MEMO, event: memoEvent, args: { from: account }, fromBlock, toBlock: latest }),
+      normalClient.getLogs({ address: SUHO_MEMO, event: memoEvent, args: { to: account }, fromBlock, toBlock: latest }),
+    ]);
+    for (const log of [...asFrom, ...asTo]) {
+      const text = (log.args as { text?: string }).text;
+      if (text) out.set(log.transactionHash.toLowerCase(), text);
+    }
+  } catch {
+    // memos are best-effort annotation; a getLogs hiccup never blocks activity
+  }
+  return out;
+}
+
 let cache: { items: ActivityItem[]; at: number; account: string } | null = null;
 
-export async function fetchActivity(): Promise<ActivityItem[]> {
+/** @param force bypass the 30s cache (used right after a send). */
+export async function fetchActivity(force = false): Promise<ActivityItem[]> {
   const account = requireActiveAccount();
-  if (cache && cache.account === account && Date.now() - cache.at < 30_000) return cache.items;
+  if (!force && cache && cache.account === account && Date.now() - cache.at < 30_000) return cache.items;
 
-  const res = await fetch(
-    `https://sepolia-explorer.giwa.io/api/v2/addresses/${account}/transactions`,
-  );
+  const [res, memos] = await Promise.all([
+    fetch(`https://sepolia-explorer.giwa.io/api/v2/addresses/${account}/transactions`),
+    fetchMemos(account as Hex),
+  ]);
   if (!res.ok) throw new Error(`explorer ${res.status}`);
   const { items } = (await res.json()) as { items: ExplorerTx[] };
 
   const acct = account.toLowerCase();
   const out: ActivityItem[] = [];
-  for (const tx of items.slice(0, 20)) {
+  for (const tx of items.slice(0, 40)) {
     const to = tx.to?.hash.toLowerCase() ?? "";
     const from = tx.from.hash.toLowerCase();
     const input = tx.raw_input ?? "0x";
@@ -75,32 +127,31 @@ export async function fetchActivity(): Promise<ActivityItem[]> {
       hash: tx.hash,
       timestamp: tx.timestamp,
       explorer: `${EXPLORER}/tx/${tx.hash}`,
+      memo: memos.get(tx.hash.toLowerCase()),
     };
 
-    if (to === acct && input.startsWith("0x156c0694")) {
-      // execute(): decode the first call to find the real action
-      try {
-        const { args } = decodeFunctionData({ abi: executeAbi, data: input });
-        const calls = args[0];
-        const first = calls[0];
-        if (first.target.toLowerCase() === EAS_ADDRESS.toLowerCase()) {
-          out.push({ ...base, kind: "card", title: "Card attested via passkey" });
-        } else if ((first.data ?? "0x") === "0x") {
-          const who = await identify(first.target);
-          out.push({
-            ...base,
-            kind: "send",
-            title: `Sent to ${who.name ? `${who.name}.up.id` : "unverified address"}`,
-            counterparty: first.target,
-            counterpartyName: who.name,
-            verified: who.verified,
-            amountWei: first.value,
-          });
-        } else {
-          out.push({ ...base, kind: "send", title: "Contract call via passkey" });
-        }
-      } catch {
+    if (to === acct && EXECUTE_SELECTORS.some((s) => input.startsWith(s))) {
+      // execute(): decode calls; calls[0] is the transfer (calls[1+] may be the
+      // batched SuhoMemo.note — its text is already in `memos`).
+      const calls = decodeCalls(input);
+      const first = calls?.[0];
+      if (!first) {
         out.push({ ...base, kind: "send", title: "Passkey transaction" });
+      } else if (first.target.toLowerCase() === EAS_ADDRESS.toLowerCase()) {
+        out.push({ ...base, kind: "card", title: "Card attested via passkey" });
+      } else if ((first.data ?? "0x") === "0x") {
+        const who = await identify(first.target);
+        out.push({
+          ...base,
+          kind: "send",
+          title: `Sent to ${who.name ? `${who.name}.up.id` : "unverified address"}`,
+          counterparty: first.target,
+          counterpartyName: who.name,
+          verified: who.verified,
+          amountWei: first.value,
+        });
+      } else {
+        out.push({ ...base, kind: "send", title: "Contract call via passkey" });
       }
     } else if (to === ARISE_MODULE.toLowerCase()) {
       out.push({ ...base, kind: "arise", title: "Passkey rotated (Arise)" });
@@ -129,6 +180,6 @@ export async function fetchActivity(): Promise<ActivityItem[]> {
     // everything else (0-value self test txs, deploys) stays out of the feed
   }
 
-  cache = { items: out.slice(0, 10), at: Date.now(), account };
+  cache = { items: out, at: Date.now(), account };
   return cache.items;
 }

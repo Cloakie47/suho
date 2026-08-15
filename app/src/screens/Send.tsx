@@ -1,17 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isAddress, parseEther, type Hex } from "viem";
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  ExternalLink,
-  IdCard,
-  KeyRound,
-  ShieldCheck,
-  Timer,
-  TriangleAlert,
-  Users,
-  Zap,
-} from "lucide-react";
+import { ExternalLink, TriangleAlert } from "lucide-react";
 import { api, type Status } from "../api";
 import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
 import { capForAccount, assertAffordable, InsufficientFundsError } from "../execute";
@@ -22,7 +11,8 @@ import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { fetchActivity, type ActivityItem } from "../activity";
 import { humanError, isUserCancel } from "../errors";
-import { recordSend, sessionStats, measuredMs } from "../stats";
+import { recordSend } from "../stats";
+import { memoCall, sanitizeBody, MEMO_MAX } from "../messages";
 
 interface Recipient {
   address: Hex;
@@ -41,92 +31,28 @@ type SendPhase =
   | { k: "confirm" } // hold-to-confirm interstitial for a large unverified transfer
   | { k: "error"; message: string };
 
-const icon = { size: 14, strokeWidth: 1.5 } as const;
-
-function StatCards({ verifiedNames }: { verifiedNames: number | null }) {
-  const { sends, avgMs } = sessionStats();
-  return (
-    <div className="stat-grid">
-      <div className="stat-card">
-        <div className="stat-label">
-          Sends this session <Zap {...icon} />
-        </div>
-        <div className="stat-value">{sends}</div>
-        <div className="stat-sub">passkey-signed</div>
-      </div>
-      <div className="stat-card">
-        <div className="stat-label">
-          Avg preconfirmation <Timer {...icon} />
-        </div>
-        <div className="stat-value jade">{avgMs === null ? "–" : `${(avgMs / 1000).toFixed(1)}s`}</div>
-        <div className="stat-sub">flashblocks, measured live</div>
-      </div>
-      <div className="stat-card">
-        <div className="stat-label">
-          Verified recipients <Users {...icon} />
-        </div>
-        <div className="stat-value">{verifiedNames === null ? "–" : verifiedNames.toLocaleString()}</div>
-        <div className="stat-sub">active up.id names</div>
-      </div>
-    </div>
-  );
-}
-
-function ActivityIcon({ item }: { item: ActivityItem }) {
-  if (item.kind === "send" && item.verified) return <Seal small />;
-  const cls =
-    item.kind === "send" || item.kind === "transfer"
-      ? "act-icon amber"
-      : item.kind === "received"
-        ? "act-icon jade"
-        : "act-icon seal-c";
-  const I =
-    item.kind === "arise"
-      ? KeyRound
-      : item.kind === "card"
-        ? IdCard
-        : item.kind === "upgrade"
-          ? ShieldCheck
-          : item.kind === "received"
-            ? ArrowDownLeft
-            : item.kind === "transfer"
-              ? ArrowUpRight
-              : TriangleAlert;
-  return (
-    <span className={cls}>
-      <I size={16} strokeWidth={1.5} />
-    </span>
-  );
-}
-
-function ActivityFeed({ bump }: { bump: number }) {
+/** A slim "recent sends" strip on the Send screen — the full history, notes, and
+ *  requests live on the Activity screen now. Read-only, last few send rows. */
+function RecentSends({ bump }: { bump: number }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  const countRef = useRef(0);
-
   useEffect(() => {
     let alive = true;
-    // A send bumps `bump`, but the tx is only PRECONFIRMED then — the explorer
-    // that fetchActivity reads lags a few seconds. On a post-send refresh, poll
-    // until the feed grows past its pre-send count so the new tx appears without
-    // a manual refresh (same shape as the Card fix). On mount, one fetch.
-    const baseline = countRef.current;
-    const isPostSend = bump > 0;
-    const maxTries = isPostSend ? 6 : 1;
     (async () => {
-      for (let i = 0; i < maxTries; i++) {
+      // Post-send: poll briefly until the new tx is indexed, then show it.
+      const isPostSend = bump > 0;
+      const tries = isPostSend ? 6 : 1;
+      for (let i = 0; i < tries; i++) {
         try {
-          const v = await fetchActivity();
+          const v = await fetchActivity(i === 0 && isPostSend);
           if (!alive) return;
-          setItems(v);
-          setFailed(false);
-          countRef.current = v.length;
-          if (!isPostSend || v.length > baseline) return; // new tx indexed
+          const sends = v.filter((it) => it.kind === "send" || it.kind === "transfer");
+          setItems(sends.slice(0, 3));
+          if (!isPostSend || sends.length > 0) return;
         } catch {
           if (!alive) return;
-          setFailed(true);
+          setItems([]);
         }
-        if (i < maxTries - 1) await new Promise((r) => setTimeout(r, 1500));
+        if (i < tries - 1) await new Promise((r) => setTimeout(r, 1500));
       }
     })();
     return () => {
@@ -134,52 +60,39 @@ function ActivityFeed({ bump }: { bump: number }) {
     };
   }, [bump]);
 
+  if (!items || items.length === 0) return null;
   return (
     <div className="card activity">
-      <h2>Activity</h2>
-      {failed && <div className="muted" style={{ padding: "8px 0 16px" }}>Explorer unreachable. Activity hidden.</div>}
-      {!items && !failed && (
-        <div style={{ padding: "8px 0 16px", display: "grid", gap: 14 }}>
-          {[80, 60, 70].map((w, i) => (
-            <div key={i} className="skeleton" style={{ width: `${w}%` }} />
-          ))}
-        </div>
-      )}
-      {items && items.length === 0 && (
-        <div className="muted" style={{ padding: "8px 0 16px" }}>
-          No sends yet. Try <b>suho.up.id</b>.
-        </div>
-      )}
-      {items &&
-        items.map((it) => {
-          const ms = measuredMs(it.hash);
-          return (
-            <div className="act-row" key={it.hash}>
-              <ActivityIcon item={it} />
-              <div className="act-main">
-                <div className="act-title">{it.title}</div>
-                <div className="act-sub">
-                  {it.counterparty ? `${shortAddr(it.counterparty)} · ` : ""}
-                  {new Date(it.timestamp).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
+      <div className="activity-head">
+        <h2>Recent sends</h2>
+        <span className="msg-empty">Full history in Activity</span>
+      </div>
+      {items.map((it) => (
+        <div key={it.hash}>
+          <div className="act-row">
+            {it.verified ? <Seal small /> : <span className="act-icon amber"><TriangleAlert size={16} strokeWidth={1.5} /></span>}
+            <div className="act-main">
+              <div className="act-title">{it.title}</div>
+              <div className="act-sub">
+                {it.counterparty ? `${shortAddr(it.counterparty)} · ` : ""}
+                {new Date(it.timestamp).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </div>
-              <div className="act-right">
-                {it.amountWei !== undefined && (
-                  <div className="act-amt">{fmtEth(it.amountWei, 4)} ETH</div>
-                )}
-                {ms !== undefined && <div className="act-ms">{(ms / 1000).toFixed(1)}s</div>}
-              </div>
-              <a className="act-link" href={it.explorer} target="_blank" rel="noreferrer" aria-label="View on explorer">
-                <ExternalLink size={14} strokeWidth={1.5} />
-              </a>
             </div>
-          );
-        })}
+            <div className="act-right">
+              {it.amountWei !== undefined && <div className="act-amt">{fmtEth(it.amountWei, 4)} ETH</div>}
+            </div>
+            <a className="act-link" href={it.explorer} target="_blank" rel="noreferrer" aria-label="View on explorer">
+              <ExternalLink size={14} strokeWidth={1.5} />
+            </a>
+          </div>
+          {it.memo && <div className="act-memo">"{it.memo}"</div>}
+        </div>
+      ))}
     </div>
   );
 }
@@ -280,8 +193,8 @@ export function Send({
   const [recipient, setRecipient] = useState<Recipient | null>(null);
   const [resolving, setResolving] = useState(false);
   const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
   const [phase, setPhase] = useState<SendPhase>({ k: "idle" });
-  const [verifiedNames, setVerifiedNames] = useState<number | null>(null);
   const [actBump, setActBump] = useState(0);
   const debounceRef = useRef<number>();
   const toast = useToast();
@@ -290,14 +203,6 @@ export function Send({
   useEffect(() => {
     if (prefillRecipient) setInput(prefillRecipient);
   }, [prefillRecipient]);
-
-  // stat card: verified-name count from the directory cache
-  useEffect(() => {
-    api.directory("").then(
-      (r) => setVerifiedNames(r.total),
-      () => setVerifiedNames(null),
-    );
-  }, []);
 
   // Live up.id resolution, 300ms debounce.
   useEffect(() => {
@@ -351,11 +256,17 @@ export function Send({
       setPhase({ k: "error", message: "Invalid amount." });
       return;
     }
+    // Build the batch up front: the transfer, plus (optionally) an on-chain memo
+    // in the SAME execute() — one passkey tap, one atomic tx (Phase M).
+    const memo = memoCall(recipient.address, note);
+    const calls: Call[] = [{ target: recipient.address, value, data: "0x" }];
+    if (memo) calls.push(memo);
+
     // Affordability preflight (value + gas reimbursement cap) with a clear
     // message BEFORE the hold-to-confirm or passkey prompt.
     try {
       const cap = await capForAccount(requireActiveAccount());
-      await assertAffordable(requireActiveAccount(), [{ target: recipient.address, value, data: "0x" }], cap);
+      await assertAffordable(requireActiveAccount(), calls, cap);
     } catch (e) {
       if (e instanceof InsufficientFundsError) {
         setPhase({ k: "error", message: e.human });
@@ -366,9 +277,7 @@ export function Send({
     }
     // Guarded send: a large transfer to an unverified address shows a
     // hold-to-confirm interstitial first (deliberate friction, not a passkey
-    // prompt). On confirm, ONE passkey signature completes it. There is no
-    // one-time code — the passkey, bound to this exact recipient+amount, is the
-    // only approval.
+    // prompt). On confirm, ONE passkey signature completes it.
     const needsConfirm = !recipient.verified && value >= LARGE_SEND_THRESHOLD_WEI;
     if (needsConfirm && phase.k !== "confirm") {
       setPhase({ k: "confirm" });
@@ -378,7 +287,6 @@ export function Send({
     let handle: TxToast | null = null;
     try {
       setPhase({ k: "signing" });
-      const calls: Call[] = [{ target: recipient.address, value, data: "0x" }];
       const [nonce, maxGasPayment] = await Promise.all([
         accountNonce(requireActiveAccount()),
         capForAccount(requireActiveAccount()),
@@ -401,15 +309,14 @@ export function Send({
         final: () => h.final(txHash),
         reverted: () => h.error(new Error("TransactionReverted")),
       });
-      recordSend(txHash, timing.preconfMs); // session stat cards + feed ms
+      recordSend(txHash, timing.preconfMs);
       localStorage.setItem(LS_FIRST_SEND, "1"); // O5 checklist step 4
+      setNote("");
       setPhase({ k: "idle" });
       setActBump((b) => b + 1);
       refresh();
     } catch (e) {
       if (isUserCancel(e)) {
-        // Passkey prompt canceled. Not an error: back to the confirm interstitial
-        // (if that's where we came from) or idle.
         handle?.dismiss();
         setPhase(fromConfirm ? { k: "confirm" } : { k: "idle" });
         toast.note("Canceled.");
@@ -417,7 +324,6 @@ export function Send({
         handle.error(e); // typed revert -> human sentence in the toast
         setPhase({ k: "idle" });
       } else {
-        // pre-relay failure with no toast yet: carry it through one
         (toast.begin(`Sending ${amount} ETH to ${recipient.display}…`)).error(e);
         setPhase({ k: "idle" });
       }
@@ -438,7 +344,7 @@ export function Send({
         <h1 className="screen-title">Send</h1>
       </div>
 
-      {/* R2 row 1: composer hero card */}
+      {/* composer hero card */}
       <div className="card hero-card">
         <div className="composer-row">
           <input
@@ -462,6 +368,20 @@ export function Send({
           >
             Send
           </button>
+        </div>
+
+        {/* M2: optional PUBLIC on-chain note, batched into the same tx. */}
+        <div className="memo-field">
+          <input
+            type="text"
+            className="memo-input"
+            placeholder="Add a public note (visible on-chain)"
+            value={note}
+            maxLength={MEMO_MAX}
+            onChange={(e) => setNote(e.target.value)}
+            aria-label="Public note"
+          />
+          {note.length > 0 && <span className="memo-count">{sanitizeBody(note).length}/{MEMO_MAX}</span>}
         </div>
 
         {resolving && (
@@ -505,11 +425,8 @@ export function Send({
       {/* O5: guided setup for onboarded accounts (legacy demo skips it) */}
       {!isLegacyDemo() && <Checklist status={status} refresh={refresh} />}
 
-      {/* R2 row 2: session stat cards */}
-      <StatCards verifiedNames={verifiedNames} />
-
-      {/* R2 row 3: real activity feed */}
-      <ActivityFeed bump={actBump} />
+      {/* slim recent sends; full history lives on the Activity screen */}
+      <RecentSends bump={actBump} />
 
       {phase.k === "confirm" && recipient && (
         <ConfirmModal

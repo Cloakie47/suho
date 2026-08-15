@@ -46,6 +46,9 @@ export const ONDOL_PROXY = hex(deployments.ondolProxy);
 export const ONDOL_V3_IMPL = hex(deployments.ondolAccountV3Impl);
 export const ONDOL_V2_IMPL = hex(deployments.ondolAccountV2Impl);
 export const ONDOL_V1_IMPL = hex(deployments.ondolAccountImpl);
+// Phase M: on-chain memo log. A note is appended as a second call in the same
+// execute() batch as the transfer, so memo + money land in one atomic tx.
+export const SUHO_MEMO = hex(deployments.suhoMemo);
 
 // Valid 7702 delegation designators for a Suho account (used by "add existing
 // account" validation). A current account delegates to the PROXY; legacy
