@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 import { Check, Copy } from "lucide-react";
 import type { Hex } from "viem";
 import { api, type Status } from "../api";
@@ -43,8 +42,24 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
   const allDone = recovered && funded && verified && named && sent;
 
   useEffect(() => {
-    QRCode.toDataURL(account, { margin: 1, width: 132, color: { dark: "#1b1917", light: "#ffffff" } })
-      .then(setQr, () => setQr(null));
+    let alive = true;
+    // qrcode is loaded on demand (code-split), not in the main bundle.
+    (async () => {
+      try {
+        const { default: QRCode } = await import("qrcode");
+        const url = await QRCode.toDataURL(account, {
+          margin: 1,
+          width: 132,
+          color: { dark: "#1b1917", light: "#ffffff" },
+        });
+        if (alive) setQr(url);
+      } catch {
+        if (alive) setQr(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [account]);
 
   useEffect(() => {

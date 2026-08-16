@@ -161,4 +161,3 @@ export const gasOracleAbi = parseAbi([
   "function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)",
 ]);
 export const explorerTx = (hash: string) => `https://sepolia-explorer.giwa.io/tx/${hash}`;
-export const explorerAddr = (a: string) => `https://sepolia-explorer.giwa.io/address/${a}`;

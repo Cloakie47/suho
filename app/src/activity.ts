@@ -1,13 +1,11 @@
 import { decodeFunctionData, parseAbi, parseAbiItem, type Hex } from "viem";
 import { api } from "./api";
-import { requireActiveAccount, EAS_ADDRESS, EXPLORER, SUHO_MEMO } from "./config";
+import { requireActiveAccount, EAS_ADDRESS, EXPLORER, SUHO_MEMO, ARISE_ADDRESS } from "./config";
 import { normalClient } from "./chain";
 
 /** Activity feed: the wallet's real transactions, read from the explorer API in
  *  the browser, annotated with on-chain memos (SuhoMemo `Memo` events). Phase M
  *  revision — memos are public chain data, read here, not from the guardian. */
-
-export const ARISE_MODULE = "0x827375200CF4595f71b09497A65BAF10Ca907466";
 
 // Both account shapes: legacy V1/V2 execute (3-arg) and V3 execute (4-arg, with
 // the signed maxGasPayment). Their selectors DIFFER, so the old code that matched
@@ -198,7 +196,7 @@ export async function fetchActivity(
       } else {
         out.push({ ...base, kind: "send", title: "Contract call via passkey" });
       }
-    } else if (to === ARISE_MODULE.toLowerCase()) {
+    } else if (to === ARISE_ADDRESS.toLowerCase()) {
       out.push({ ...base, kind: "arise", title: "Passkey rotated (Arise)" });
     } else if (to === acct && from === acct && input.startsWith("0x1f57365e")) {
       out.push({ ...base, kind: "upgrade", title: "Upgraded to smart account (EIP-7702)" });

@@ -1,4 +1,4 @@
-import { encodeAbiParameters, keccak256, encodeAbiParameters as enc, type Hex } from "viem";
+import { encodeAbiParameters, type Hex } from "viem";
 
 /// WebAuthn plumbing between the browser and OndolAccount's verifier.
 ///
@@ -148,32 +148,5 @@ export function encodeWebAuthnSig(assertion: BrowserAssertion): Hex {
         s: sLow,
       },
     ],
-  );
-}
-
-/** The execute() challenge: keccak256(abi.encode(account, chainId, nonce, calls)). */
-export function computeChallenge(
-  account: Hex,
-  chainId: bigint,
-  nonce: bigint,
-  calls: { target: Hex; value: bigint; data: Hex }[],
-): Hex {
-  return keccak256(
-    enc(
-      [
-        { type: "address" },
-        { type: "uint256" },
-        { type: "uint256" },
-        {
-          type: "tuple[]",
-          components: [
-            { name: "target", type: "address" },
-            { name: "value", type: "uint256" },
-            { name: "data", type: "bytes" },
-          ],
-        },
-      ],
-      [account, chainId, nonce, calls],
-    ),
   );
 }

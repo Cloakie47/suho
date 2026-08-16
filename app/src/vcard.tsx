@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import QRCode from "qrcode";
 import type { CardVersion } from "./api";
 import { APP_URL } from "./config";
 import { Seal } from "./ui";
@@ -29,11 +28,25 @@ export function VCard({
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    QRCode.toDataURL(`${APP_URL}/#/verify/${address}`, {
-      margin: 1,
-      width: 152,
-      color: { dark: "#1b1917", light: "#ffffff" },
-    }).then(setQr, () => setQr(null));
+    let alive = true;
+    // qrcode is ~73 KB; load it only when a Card actually renders, not in the
+    // main bundle. Dynamic import code-splits it into its own chunk.
+    (async () => {
+      try {
+        const { default: QRCode } = await import("qrcode");
+        const url = await QRCode.toDataURL(`${APP_URL}/#/verify/${address}`, {
+          margin: 1,
+          width: 152,
+          color: { dark: "#1b1917", light: "#ffffff" },
+        });
+        if (alive) setQr(url);
+      } catch {
+        if (alive) setQr(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [address]);
 
   useEffect(() => {

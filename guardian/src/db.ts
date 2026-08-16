@@ -269,16 +269,6 @@ export async function getRecovery(
   return { encrypted: rows[0].recovery_email_encrypted, hash: rows[0].recovery_email_hash };
 }
 
-export async function hasRecovery(address: string): Promise<boolean> {
-  return (await getRecovery(address)) !== null;
-}
-
-/// Retention: recovery data exists only to deliver recovery, and is removed with
-/// the account.
-export async function removeAccount(address: string): Promise<void> {
-  await db().query(`DELETE FROM accounts WHERE address = $1`, [addr(address)]);
-}
-
 export async function recordEmailEvent(
   address: string,
   emailHashHex: string | null,

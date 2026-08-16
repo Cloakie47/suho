@@ -54,11 +54,3 @@ export function sendEmailChangeNotice(to: string): Promise<string> {
       `If this was you, no action is needed. If it was not, act now — whoever changed it is present with your passkey.`,
   });
 }
-
-/// Resend delivery status for a message id — used to attest a real round-trip.
-export async function deliveryStatus(id: string): Promise<string> {
-  const key = process.env.RESEND_API_KEY;
-  const r = await fetch(`${RESEND_URL}/${id}`, { headers: { authorization: `Bearer ${key}` } });
-  const j = (await r.json()) as { last_event?: string };
-  return j.last_event ?? JSON.stringify(j);
-}
