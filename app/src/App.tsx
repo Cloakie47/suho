@@ -4,6 +4,7 @@ import {
   BookUser,
   IdCard,
   KeyRound,
+  ShieldCheck,
   ScrollText,
   Check,
   Copy,
@@ -386,12 +387,13 @@ import { ErrNote, GithubMark, Seal, Spinner, fmtEth, shortAddr } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
 import { Activity } from "./screens/Activity";
+import { Locks } from "./screens/Locks";
 import { Arise } from "./screens/Arise";
 import { Directory } from "./screens/Directory";
 import { Card } from "./screens/Card";
 import { Verify } from "./screens/Verify";
 
-type Screen = "upgrade" | "send" | "activity" | "directory" | "card" | "arise";
+type Screen = "upgrade" | "send" | "activity" | "directory" | "card" | "arise" | "locks";
 
 const NAV: { key: Screen; label: string; icon: LucideIcon }[] = [
   { key: "send", label: "Send", icon: SendHorizontal },
@@ -399,6 +401,7 @@ const NAV: { key: Screen; label: string; icon: LucideIcon }[] = [
   { key: "directory", label: "Directory", icon: BookUser },
   { key: "card", label: "Card", icon: IdCard },
   { key: "arise", label: "Arise", icon: KeyRound },
+  { key: "locks", label: "Protection", icon: ShieldCheck },
 ];
 
 /** Sidebar identity block: seal, name, copyable address, balance, attestation.
@@ -672,6 +675,7 @@ export default function App() {
       )}
       {screen === "card" && <Card status={status} />}
       {screen === "arise" && <Arise refresh={refresh} />}
+      {screen === "locks" && <Locks status={status} refresh={refresh} />}
     </>
   );
 

@@ -744,3 +744,13 @@ button.ghost.danger { color: var(--danger); border-color: rgba(194, 59, 53, 0.4)
 /* pagination */
 .pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px 0 4px; }
 .pager-label { font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-dim); }
+
+/* ================= Phase SEC 2.3: security locks ================= */
+.lock-row { display: flex; gap: 12px; align-items: flex-start; }
+.lock-row > svg { color: var(--seal); flex: none; margin-top: 2px; }
+.lock-title { font-size: 0.98rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.lock-badge {
+  font-family: var(--font-mono); font-size: 0.68rem; padding: 2px 8px; border-radius: 999px;
+  background: rgba(27, 25, 23, 0.06); color: var(--ink-dim); font-weight: 500;
+}
+.lock-badge.on { background: rgba(62, 122, 94, 0.14); color: var(--jade); }

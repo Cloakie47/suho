@@ -54,12 +54,13 @@ import {
   recentOps,
   audit,
 } from "./db.js";
-import { sendConfirmationCode, sendAriseCode, sendEmailChangeNotice } from "./email.js";
+import { sendConfirmationCode, sendAriseCode, sendEmailChangeNotice, sendRecoveryChangeAuthCode } from "./email.js";
 import { emailHash, decryptEmail } from "./crypto.js";
 import { randomInt, randomBytes } from "node:crypto";
 import { getDirectory, prewarmDirectory } from "./directory.js";
 import { getCard, prewarmCards } from "./card.js";
 import { registerMessages } from "./messages.js";
+import { registerV4Locks, readLockState } from "./v4locks.js";
 
 const app = express();
 app.use(express.json());
@@ -331,6 +332,17 @@ app.get("/status", async (req, res) => {
       upgradeable,
       initialized,
       accountNonce,
+      // V4 email second-factor state (all false/0 on pre-V4 accounts).
+      locks: await (async () => {
+        const s = readable
+          ? await readLockState(address)
+          : { sensitiveOpLock: false, emailLargeSendLock: false, sensitiveOpNonce: 0n };
+        return {
+          sensitiveOpLock: s.sensitiveOpLock,
+          emailLargeSendLock: s.emailLargeSendLock,
+          sensitiveOpNonce: s.sensitiveOpNonce.toString(),
+        };
+      })(),
       // Global service state: onboarding pauses when the relayer is below floor.
       sponsoredOnboardingPaused: await sponsoredOnboardingPaused(),
     };
@@ -482,7 +494,13 @@ app.post("/relay", async (req, res) => {
     // unverified send), surface the typed error — the guardian never mints a code
     // to paper over it.
     const result = await submitExecute(otpCode ?? "");
-    if (result.refused) return res.status(400).json({ error: result.refused });
+    if (result.refused) {
+      // Record refused preflights so a diagnosis (like the V3/V4 upgradeTo
+      // selector mismatch) is visible in /health.lastError and the logs, not
+      // just returned to the client.
+      noteError("relay/refused", result.refused);
+      return res.status(400).json({ error: result.refused });
+    }
     relaysServed++;
     res.json({ txHash: result.txHash, explorer: explorerTx(result.txHash!) }); // client watches Flashblocks
   } catch (e) {
@@ -926,10 +944,23 @@ app.post("/recovery/request-code", async (req, res) => {
       code,
       expiresAt: Date.now() + 10 * 60_000,
     });
-    await sendConfirmationCode(email.trim(), code);
-    await recordEmailEvent(account, eh, "confirm");
+    // G3 gate: on a LOCKED account, CHANGING the recovery email requires proving
+    // control of the CURRENT address, so a passkey-only attacker cannot rotate
+    // the recovery channel to their own inbox and then Arise-takeover. When
+    // locked AND changing, the confirmation code goes to the OLD address; the
+    // rebind can only be confirmed by whoever reads the current recovery email.
     const existing = await getRecovery(account);
-    if (existing && existing.hash !== eh) {
+    const changing = !!existing && existing.hash !== eh;
+    const locked = changing ? (await readLockState(account)).sensitiveOpLock : false;
+    if (locked && existing) {
+      await sendRecoveryChangeAuthCode(decryptEmail(existing.encrypted), code);
+    } else {
+      await sendConfirmationCode(email.trim(), code);
+    }
+    await recordEmailEvent(account, eh, "confirm");
+    // Always notify the old address of a change attempt (unlocked path keeps its
+    // heads-up; the locked path already routed the code there).
+    if (changing && !locked && existing) {
       try {
         await sendEmailChangeNotice(decryptEmail(existing.encrypted));
       } catch (e) {
@@ -1013,6 +1044,9 @@ app.get("/ops", async (req, res) => {
 // (verifiedBy) and error sink (noteError). All anchoring, passkey gating, and
 // at-rest encryption live in ./messages + ./txverify + ./db.
 registerMessages(app, { verifiedBy, noteError });
+
+// ---- Phase SEC 2.3: OndolAccountV4 email second factor (op-code minting) ----
+registerV4Locks(app, { passGate, issueGate, noteError });
 
 // PORT from env for hosted deploys (Railway injects it); 8787 for local dev.
 const PORT = Number(process.env.PORT) || 8787;

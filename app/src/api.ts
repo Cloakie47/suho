@@ -18,6 +18,8 @@ export interface Status {
   upgradeable?: boolean;
   initialized: boolean;
   accountNonce: string;
+  /** V4 email second-factor state (all false/"0" on pre-V4 accounts). */
+  locks?: { sensitiveOpLock: boolean; emailLargeSendLock: boolean; sensitiveOpNonce: string };
   /** Global: sponsored onboarding is paused (relayer below its floor). */
   sponsoredOnboardingPaused?: boolean;
 }
@@ -132,6 +134,12 @@ export const api = {
       "/messages/return-request",
       post({ account, txHash, body, sig }),
     ),
+  // ---- Phase SEC 2.3: V4 email second-factor op codes ----
+  opChallenge: (account: Hex) => req<{ challenge: Hex }>(`/op/challenge?account=${account}`),
+  opRequestCode: (account: Hex, op: string, param: Hex | undefined, webauthn: AssertionPayload) =>
+    req<{ ok: boolean }>("/op/request-code", post({ account, op, param, webauthn })),
+  opRequestSendCode: (account: Hex, recipient: Hex, value: string, webauthn: AssertionPayload) =>
+    req<{ ok: boolean }>("/op/request-send-code", post({ account, recipient, value, webauthn })),
   msgChallenge: (account: Hex) => req<{ challenge: Hex }>(`/messages/challenge?account=${account}`),
   msgSession: (account: Hex, sig: AssertionPayload) =>
     req<{ token: string; expiresAt: number }>("/messages/session", post({ account, sig })),

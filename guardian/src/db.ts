@@ -272,7 +272,7 @@ export async function getRecovery(
 export async function recordEmailEvent(
   address: string,
   emailHashHex: string | null,
-  kind: "confirm" | "arise",
+  kind: "confirm" | "arise" | "op",
 ): Promise<void> {
   await db().query(`INSERT INTO email_events (address, email_hash, kind) VALUES ($1, $2, $3)`, [
     addr(address),
@@ -286,7 +286,7 @@ export async function recordEmailEvent(
 export async function countRecentEmailEvents(opts: {
   address?: string;
   emailHashHex?: string;
-  kind: "confirm" | "arise";
+  kind: "confirm" | "arise" | "op";
   windowMs: number;
 }): Promise<number> {
   const since = new Date(Date.now() - opts.windowMs);

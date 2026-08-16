@@ -50,6 +50,7 @@ const hex = (a: string) => a as `0x${string}`;
 export const GUARD_ADDRESS = hex(deployments.ondolTransferGuard);
 export const ARISE_ADDRESS = hex(deployments.ariseModule);
 export const ONDOL_PROXY = hex(deployments.ondolProxy);
+export const ONDOL_V4_IMPL = hex(deployments.ondolAccountV4Impl);
 export const ONDOL_V3_IMPL = hex(deployments.ondolAccountV3Impl);
 export const ONDOL_V2_IMPL = hex(deployments.ondolAccountV2Impl);
 export const ONDOL_V1_IMPL = hex(deployments.ondolAccountImpl);
@@ -64,6 +65,7 @@ export const SUHO_MEMO = hex(deployments.suhoMemo);
 // proxy-fronted account. Lowercased for comparison against the code designator.
 export const ONDOL_DELEGATION_TARGETS: readonly string[] = [
   ONDOL_PROXY,
+  ONDOL_V4_IMPL,
   ONDOL_V3_IMPL,
   ONDOL_V2_IMPL,
   ONDOL_V1_IMPL,

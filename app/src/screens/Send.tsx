@@ -13,6 +13,7 @@ import { fetchActivity, peekActivity, type ActivityItem } from "../activity";
 import { humanError, isUserCancel } from "../errors";
 import { recordSend } from "../stats";
 import { memoCall, sanitizeBody, MEMO_MAX } from "../messages";
+import { requestSendCode } from "../locks";
 
 interface Recipient {
   address: Hex;
@@ -29,6 +30,7 @@ type SendPhase =
   | { k: "signing" }
   | { k: "inflight" }
   | { k: "confirm" } // hold-to-confirm interstitial for a large unverified transfer
+  | { k: "sendcode"; code: string; sending: boolean; error?: string } // V4 email factor
   | { k: "error"; message: string };
 
 /** A slim "recent sends" strip on the Send screen — the full history, notes, and
@@ -251,7 +253,7 @@ export function Send({
     }, 300);
   }, [input]);
 
-  const doSend = async () => {
+  const doSend = async (otp = "") => {
     if (!recipient || recipient.notFound) return;
     const credentialId = storedCredential();
     if (!credentialId) {
@@ -288,11 +290,11 @@ export function Send({
     // hold-to-confirm interstitial first (deliberate friction, not a passkey
     // prompt). On confirm, ONE passkey signature completes it.
     const needsConfirm = !recipient.verified && value >= LARGE_SEND_THRESHOLD_WEI;
-    if (needsConfirm && phase.k !== "confirm") {
+    if (needsConfirm && phase.k !== "confirm" && phase.k !== "sendcode") {
       setPhase({ k: "confirm" });
       return;
     }
-    const fromConfirm = phase.k === "confirm";
+    const fromConfirm = phase.k === "confirm" || phase.k === "sendcode";
     let handle: TxToast | null = null;
     try {
       setPhase({ k: "signing" });
@@ -309,7 +311,7 @@ export function Send({
       const { txHash } = await api.relay(
         requireActiveAccount(),
         calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
-        "", // no OTP: the guard allows a confirmed large unverified send on passkey authority
+        otp, // "" unless the account's large-send email lock requires a code
         webauthn,
         maxGasPayment?.toString(),
       );
@@ -345,6 +347,26 @@ export function Send({
   const willWarn = recipient && !recipient.notFound && !recipient.verified;
   const willConfirm = willWarn && value >= LARGE_SEND_THRESHOLD_WEI;
   const busy = phase.k === "signing" || phase.k === "inflight";
+  const emailLargeSendLock = !!status.locks?.emailLargeSendLock;
+
+  // After the hold-to-confirm: if the account's large-send email lock is on,
+  // request a code (emailed) and collect it; otherwise proceed straight to the
+  // passkey. The hold-to-confirm stays as friction; the code is the real factor.
+  const afterHoldConfirm = async () => {
+    if (!recipient) return;
+    if (!emailLargeSendLock) {
+      void doSend("");
+      return;
+    }
+    setPhase({ k: "sendcode", code: "", sending: true });
+    try {
+      await requestSendCode(requireActiveAccount(), recipient.address, value.toString());
+      setPhase({ k: "sendcode", code: "", sending: false });
+    } catch (e) {
+      if (isUserCancel(e)) setPhase({ k: "idle" });
+      else setPhase({ k: "sendcode", code: "", sending: false, error: humanError(e).text });
+    }
+  };
 
   return (
     <div>
@@ -440,10 +462,48 @@ export function Send({
       {phase.k === "confirm" && recipient && (
         <ConfirmModal
           amount={amount}
-          onConfirm={() => doSend()}
+          onConfirm={() => void afterHoldConfirm()}
           onClose={() => setPhase({ k: "idle" })}
           busy={busy}
         />
+      )}
+
+      {phase.k === "sendcode" && recipient && (
+        <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Enter large-send code">
+          <div className="l2 confirm-modal">
+            <h2 style={{ margin: 0 }}>Confirm this large send</h2>
+            <p className="muted" style={{ margin: "8px 0 0" }}>
+              {phase.sending && !phase.error ? (
+                <><Spinner /> Sending a code to your recovery email…</>
+              ) : (
+                <>Extra protection is on. Enter the 6-digit code we emailed you to send <b>{amount} ETH</b> to this unverified address.</>
+              )}
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              className="memo-input"
+              placeholder="6-digit code"
+              value={phase.code}
+              maxLength={6}
+              disabled={phase.sending}
+              onChange={(e) => setPhase({ ...phase, code: e.target.value.replace(/\D/g, ""), error: undefined })}
+              style={{ marginTop: 12 }}
+            />
+            {phase.error && <div className="errbox" style={{ marginTop: 8 }}>{phase.error}</div>}
+            <button
+              className="primary wide"
+              disabled={phase.sending || phase.code.trim().length < 6}
+              onClick={() => void doSend(phase.code.trim())}
+              style={{ marginTop: 14 }}
+            >
+              {phase.sending ? "Sending…" : "Confirm and send"}
+            </button>
+            <button className="secondary" disabled={phase.sending} onClick={() => setPhase({ k: "idle" })}>
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

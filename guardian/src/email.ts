@@ -45,6 +45,37 @@ export function sendAriseCode(to: string, code: string, account: string, expires
   });
 }
 
+/// Phase SEC 2.3: the second-factor code for a locked sensitive op (setGuard /
+/// upgrade / disabling a lock) or a large send. `what` is a short human phrase.
+export function sendOpCode(to: string, code: string, what: string, account: string): Promise<string> {
+  return send({
+    to,
+    subject: "Your Suho security code",
+    text:
+      `Your Suho security code is ${code}.\n\n` +
+      `It authorizes: ${what}\nfor your Suho account\n${account}\n` +
+      `It expires in 10 minutes and can be used once.\n\n` +
+      `If you did not request this, ignore this email. Your account is unchanged, ` +
+      `and whoever asked has your passkey but not this code, so nothing happens without it.`,
+  });
+}
+
+/// G3: on a LOCKED account, changing the recovery email requires a code sent to
+/// the CURRENT (old) address, so a passkey-only attacker cannot rotate the
+/// recovery channel to their own inbox.
+export function sendRecoveryChangeAuthCode(to: string, code: string): Promise<string> {
+  return send({
+    to,
+    subject: "Authorize changing your Suho recovery email",
+    text:
+      `Your Suho security code is ${code}.\n\n` +
+      `Someone asked to change the recovery email on your account to a different address. ` +
+      `Because extra protection is on, this change needs a code sent to your current recovery email (this one).\n\n` +
+      `Enter it only if YOU are changing your recovery email. If you did not ask for this, ` +
+      `do nothing: the change cannot proceed without this code, so your recovery channel stays as it is.`,
+  });
+}
+
 export function sendEmailChangeNotice(to: string): Promise<string> {
   return send({
     to,

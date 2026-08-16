@@ -29,6 +29,7 @@ const out = {
   ondolAccountV3Impl: d.ondolAccountV3Impl,
   ondolAccountV2Impl: d.ondolAccountV2Impl,
   ondolAccountImpl: d.ondolAccountImpl, // v1 (legacy) — a valid delegation target
+  ondolAccountV4Impl: d.ondolAccountV4Impl, // Phase SEC 2.3: email second-factor impl
   suhoCodeAttester: d.suhoCodeAttester,
   suhoMemo: d.suhoMemo, // Phase M: on-chain memo log (batched into execute)
 };

@@ -133,6 +133,15 @@ export const ondolV3Abi = parseAbi([
   "error CodeAlreadyUsed()",
 ]);
 
+// OndolAccountV4: the email second-factor views the guardian reads to decide
+// code minting + the G3 recovery-email-change gate. Absent on V1/V2/V3 (the
+// staticcall reverts, and the guardian treats that as "not locked").
+export const ondolV4Abi = parseAbi([
+  "function sensitiveOpLock() view returns (bool)",
+  "function emailLargeSendLock() view returns (bool)",
+  "function sensitiveOpNonce() view returns (uint256)",
+]);
+
 export const faucetExtensionAbi = parseAbi([
   "function payAndIssueEAS() payable",
   "function fee() view returns (uint256)",
