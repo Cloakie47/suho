@@ -19,6 +19,7 @@ import {
   relayerAccount,
   readTwice,
   giwaSepolia,
+  SUHO_DEV,
 } from "./chain.js";
 import {
   ADDR,
@@ -59,22 +60,6 @@ import { randomInt, randomBytes } from "node:crypto";
 import { getDirectory, prewarmDirectory } from "./directory.js";
 import { getCard, prewarmCards } from "./card.js";
 import { registerMessages } from "./messages.js";
-
-// P4: demo readiness — alice must cover one verified send (0.0002) plus one OTP
-// send at threshold+0.001, with 30% margin. Execute gas is relayer-paid, so only
-// transfer values count. Threshold is read from the deployed guard at startup.
-const VERIFIED_SEND_WEI = 200_000_000_000_000n; // 0.0002 ether
-const OTP_MARGIN_WEI = 1_000_000_000_000_000n; // 0.001 ether
-let demoRequiredWei = 0n;
-(async () => {
-  const threshold = await publicClient.readContract({
-    address: ADDR.ondolTransferGuard,
-    abi: [{ type: "function", name: "otpThreshold", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" }] as const,
-    functionName: "otpThreshold",
-  });
-  demoRequiredWei = ((VERIFIED_SEND_WEI + threshold + OTP_MARGIN_WEI) * 13n) / 10n;
-  console.log(`demo readiness threshold: ${demoRequiredWei} wei`);
-})().catch((e) => console.error("could not read guard threshold:", e));
 
 const app = express();
 app.use(express.json());
@@ -343,8 +328,6 @@ app.get("/status", async (req, res) => {
       upgradeable,
       initialized,
       accountNonce,
-      demoReady: demoRequiredWei > 0n ? balance >= demoRequiredWei : true,
-      demoRequiredWei: demoRequiredWei.toString(),
       // Global service state: onboarding pauses when the relayer is below floor.
       sponsoredOnboardingPaused: await sponsoredOnboardingPaused(),
     };
@@ -374,6 +357,10 @@ app.get("/resolve", async (req, res) => {
 // step. Auth-nonce = tx-nonce + 1 (probe-verified rule for self-submission);
 // viem's executor:'self' encodes exactly that.
 app.post("/upgrade", async (req, res) => {
+  // Dev-only: absent in production (no SUHO_DEV => no alice key loaded).
+  if (!SUHO_DEV || !aliceWallet || !aliceAccount) {
+    return res.status(404).json({ error: "not found" });
+  }
   try {
     const { address, passkey } = req.body as {
       address: Hex;
@@ -764,9 +751,11 @@ app.post("/claim-name", async (req, res) => {
 });
 
 // ---- GET /demo-credential ----
-// Demo glue: alice's account was initialized with the probe E Windows Hello
-// credential; the app fetches its id here when localStorage is empty.
+// Dev-only glue: alice's account was initialized with the probe Windows Hello
+// credential; the app fetches its id here when localStorage is empty. Absent in
+// production (404 without SUHO_DEV).
 app.get("/demo-credential", (_req, res) => {
+  if (!SUHO_DEV) return res.status(404).json({ error: "not found" });
   try {
     const __dirname2 = path.dirname(fileURLToPath(import.meta.url));
     const probe = JSON.parse(
@@ -1028,7 +1017,7 @@ const PORT = Number(process.env.PORT) || 8787;
 app.listen(PORT, async () => {
   console.log(`suho guardian on :${PORT} (chain ${giwaSepolia.id})`);
   console.log(`relayer/issuer: ${relayerAccount.address}`);
-  console.log(`demo EOA:       ${aliceAccount.address}`);
+  if (SUHO_DEV && aliceAccount) console.log(`demo EOA (dev):  ${aliceAccount.address}`);
   console.log(`CORS: ${CORS_ALLOW.includes("*") ? "open (*)" : CORS_ALLOW.join(", ")}`);
   try {
     await initDb();

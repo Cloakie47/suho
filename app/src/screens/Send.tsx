@@ -9,7 +9,7 @@ import { requireActiveAccount, isLegacyDemo, storedCredential, LARGE_SEND_THRESH
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
 import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
-import { fetchActivity, type ActivityItem } from "../activity";
+import { fetchActivity, peekActivity, type ActivityItem } from "../activity";
 import { humanError, isUserCancel } from "../errors";
 import { recordSend } from "../stats";
 import { memoCall, sanitizeBody, MEMO_MAX } from "../messages";
@@ -32,9 +32,17 @@ type SendPhase =
   | { k: "error"; message: string };
 
 /** A slim "recent sends" strip on the Send screen — the full history, notes, and
- *  requests live on the Activity screen now. Read-only, last few send rows. */
-function RecentSends({ bump }: { bump: number }) {
-  const [items, setItems] = useState<ActivityItem[] | null>(null);
+ *  requests live on the Activity screen now. Read-only, last few send rows.
+ *  Never blocks the composer: it paints instantly from cache if present, then
+ *  refreshes in the background WITHOUT the memo getLogs (Send stays light). */
+const sendRows = (v: ActivityItem[]) =>
+  v.filter((it) => it.kind === "send" || it.kind === "transfer").slice(0, 3);
+
+function RecentSends({ account, bump }: { account: string; bump: number }) {
+  const [items, setItems] = useState<ActivityItem[] | null>(() => {
+    const cached = peekActivity(account);
+    return cached ? sendRows(cached) : null;
+  });
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -43,14 +51,15 @@ function RecentSends({ bump }: { bump: number }) {
       const tries = isPostSend ? 6 : 1;
       for (let i = 0; i < tries; i++) {
         try {
-          const v = await fetchActivity(i === 0 && isPostSend);
+          // withMemos:false — no log queries on the Send screen.
+          const v = await fetchActivity(i === 0 && isPostSend, { withMemos: false });
           if (!alive) return;
-          const sends = v.filter((it) => it.kind === "send" || it.kind === "transfer");
-          setItems(sends.slice(0, 3));
+          const sends = sendRows(v);
+          setItems(sends);
           if (!isPostSend || sends.length > 0) return;
         } catch {
           if (!alive) return;
-          setItems([]);
+          setItems((prev) => prev ?? []);
         }
         if (i < tries - 1) await new Promise((r) => setTimeout(r, 1500));
       }
@@ -58,7 +67,7 @@ function RecentSends({ bump }: { bump: number }) {
     return () => {
       alive = false;
     };
-  }, [bump]);
+  }, [account, bump]);
 
   if (!items || items.length === 0) return null;
   return (
@@ -426,7 +435,7 @@ export function Send({
       {!isLegacyDemo() && <Checklist status={status} refresh={refresh} />}
 
       {/* slim recent sends; full history lives on the Activity screen */}
-      <RecentSends bump={actBump} />
+      <RecentSends account={status.address} bump={actBump} />
 
       {phase.k === "confirm" && recipient && (
         <ConfirmModal

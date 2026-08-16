@@ -32,6 +32,13 @@ export const EXPLORER = "https://sepolia-explorer.giwa.io";
 // onboard their own account below.
 export const DEMO_ACCOUNT = "0xacc2a6Eb741E147e8D3Ed9213b070656c908Adad" as const;
 
+// Demo/legacy affordances are a DEV convenience. In a PRODUCTION build
+// (`vite build`, import.meta.env.DEV === false) they are hidden entirely, so a
+// stranger on the live site sees only Create and Recover — never the demo
+// account, which only half-works off localhost and confuses real users. Force it
+// on for a staging build with VITE_SHOW_DEMO=1 if ever needed.
+export const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO === "1";
+
 // Ondol wiring for onboarding — DERIVED from the canonical deployments file
 // (contracts/deployments/giwa-sepolia.json), synced into src by the
 // predev/prebuild `sync-deployments` script. Never hardcode these: onboarding

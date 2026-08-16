@@ -6,6 +6,7 @@ import { api } from "../api";
 import {
   ARISE_ADDRESS,
   DEMO_ACCOUNT,
+  SHOW_DEMO,
   EXPLORER,
   GUARD_ADDRESS,
   storeCredential,
@@ -184,7 +185,7 @@ export function Onboard({
             </p>
             {paused && (
               <div className="status-banner" role="status" style={{ marginBottom: 12 }}>
-                New account creation is paused. The demo relayer needs a top-up.
+                New account creation is paused. The service wallet needs a top-up.
               </div>
             )}
             <button className="primary wide" onClick={create} disabled={paused}>
@@ -193,9 +194,11 @@ export function Onboard({
             <button className="secondary" onClick={onRecover} style={{ fontSize: "0.8rem" }}>
               Recover a lost account
             </button>
-            <button className="secondary" onClick={onLegacy} style={{ fontSize: "0.8rem" }}>
-              I have the demo account
-            </button>
+            {SHOW_DEMO && (
+              <button className="secondary" onClick={onLegacy} style={{ fontSize: "0.8rem" }}>
+                I have the demo account
+              </button>
+            )}
           </div>
         )}
 
@@ -257,9 +260,11 @@ export function Onboard({
           </div>
         )}
 
-        <p className="muted center" style={{ fontSize: "0.75rem", marginTop: 18 }}>
-          Demo account ({shortAddr(DEMO_ACCOUNT)}) remains available via the legacy path.
-        </p>
+        {SHOW_DEMO && (
+          <p className="muted center" style={{ fontSize: "0.75rem", marginTop: 18 }}>
+            Demo account ({shortAddr(DEMO_ACCOUNT)}) remains available via the legacy path.
+          </p>
+        )}
       </div>
     </div>
   );

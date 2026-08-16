@@ -32,6 +32,10 @@ const SENTENCES: Record<string, string> = {
   // New accounts use the updated guard and never hit this.
   OtpRequired:
     "This account uses an older guard and can't send large amounts to unverified addresses. Create a new account to use the updated guard.",
+  // No passkey linked to the active account on THIS device (e.g. an imported
+  // account not yet linked). Never a dead-end: point to Accounts.
+  "No passkey linked on this device":
+    "No passkey is linked to this account on this device. Open Accounts to switch or create one.",
   // guardian-level (non-contract) errors that can reach the UI
   PasskeyRequired: "Confirm with your passkey to continue.",
   RateLimited: "Too many attempts. Wait a little and try again.",

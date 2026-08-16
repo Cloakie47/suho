@@ -103,23 +103,68 @@ async function fetchMemos(account: Hex): Promise<Map<string, string>> {
   return out;
 }
 
-let cache: { items: ActivityItem[]; at: number; account: string } | null = null;
+let cache: { items: ActivityItem[]; at: number; account: string; withMemos: boolean } | null = null;
 
-/** @param force bypass the 30s cache (used right after a send). */
-export async function fetchActivity(force = false): Promise<ActivityItem[]> {
+/** Synchronous peek at the cached feed for the current account — lets a screen
+ *  paint recent activity instantly, then refresh in the background. */
+export function peekActivity(account: string): ActivityItem[] | null {
+  return cache && cache.account === account ? cache.items : null;
+}
+
+/** @param force bypass the 30s cache (used right after a send).
+ *  @param opts.withMemos read on-chain memos (2 getLogs). Default true; the Send
+ *         screen passes false so its "Recent sends" strip never blocks on log
+ *         queries over the rate-limited RPC. */
+export async function fetchActivity(
+  force = false,
+  opts: { withMemos?: boolean } = {},
+): Promise<ActivityItem[]> {
+  const withMemos = opts.withMemos ?? true;
   const account = requireActiveAccount();
-  if (!force && cache && cache.account === account && Date.now() - cache.at < 30_000) return cache.items;
+  // A cache built WITH memos satisfies a no-memos read too; a no-memos cache does
+  // not satisfy a with-memos read.
+  if (
+    !force &&
+    cache &&
+    cache.account === account &&
+    Date.now() - cache.at < 30_000 &&
+    (cache.withMemos || !withMemos)
+  ) {
+    return cache.items;
+  }
 
   const [res, memos] = await Promise.all([
     fetch(`https://sepolia-explorer.giwa.io/api/v2/addresses/${account}/transactions`),
-    fetchMemos(account as Hex),
+    withMemos ? fetchMemos(account as Hex) : Promise.resolve(new Map<string, string>()),
   ]);
   if (!res.ok) throw new Error(`explorer ${res.status}`);
   const { items } = (await res.json()) as { items: ExplorerTx[] };
 
   const acct = account.toLowerCase();
+  const rows = items.slice(0, 40);
+
+  // Pre-resolve every counterparty identity IN PARALLEL before building the feed.
+  // The old code awaited identify() serially inside the loop — up to ~40 back-to-
+  // back guardian round-trips over the rate-limited RPC, the main source of the
+  // slow feed. identify() caches, so the build loop below hits cache instantly.
+  const toIdentify = new Set<Hex>();
+  for (const tx of rows) {
+    const to = tx.to?.hash.toLowerCase() ?? "";
+    const from = tx.from.hash.toLowerCase();
+    const input = tx.raw_input ?? "0x";
+    if (to === acct && EXECUTE_SELECTORS.some((s) => input.startsWith(s))) {
+      const first = decodeCalls(input)?.[0];
+      if (first && (first.data ?? "0x") === "0x" && first.target.toLowerCase() !== EAS_ADDRESS.toLowerCase()) {
+        toIdentify.add(first.target);
+      }
+    } else if (to === acct && from !== acct && input === "0x" && BigInt(tx.value) > 0n) {
+      toIdentify.add(tx.from.hash);
+    }
+  }
+  await Promise.all([...toIdentify].map((a) => identify(a)));
+
   const out: ActivityItem[] = [];
-  for (const tx of items.slice(0, 40)) {
+  for (const tx of rows) {
     const to = tx.to?.hash.toLowerCase() ?? "";
     const from = tx.from.hash.toLowerCase();
     const input = tx.raw_input ?? "0x";
@@ -180,6 +225,6 @@ export async function fetchActivity(force = false): Promise<ActivityItem[]> {
     // everything else (0-value self test txs, deploys) stays out of the feed
   }
 
-  cache = { items: out, at: Date.now(), account };
+  cache = { items: out, at: Date.now(), account, withMemos };
   return cache.items;
 }

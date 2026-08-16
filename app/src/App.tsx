@@ -24,6 +24,7 @@ import {
   setActiveAccount,
   storeCredential,
   DEMO_ACCOUNT,
+  SHOW_DEMO,
   DOCS_URL,
   GITHUB_URL,
   LANDING_URL,
@@ -264,7 +265,7 @@ function AccountSwitcher({
                     {r.verified ? <Seal small /> : <span className="gray-dot" aria-label="Unverified" />}
                     <span className="switch-name">
                       {r.upId ? `${r.upId}.up.id` : shortAddr(r.address)}
-                      {r.address.toLowerCase() === DEMO_ACCOUNT.toLowerCase() && (
+                      {SHOW_DEMO && r.address.toLowerCase() === DEMO_ACCOUNT.toLowerCase() && (
                         <span className="demo-tag">demo</span>
                       )}
                       <span className="cred-line">
@@ -338,7 +339,7 @@ function AccountSwitcher({
               <button className="secondary" onClick={() => setAdding(true)}>
                 Add existing account
               </button>
-              {!hasDemo && (
+              {SHOW_DEMO && !hasDemo && (
                 <button
                   className="secondary"
                   onClick={() => {
@@ -414,7 +415,7 @@ function IdentityCard({ status, onOpen }: { status: Status; onOpen: () => void }
       className="id-card"
       role="button"
       tabIndex={0}
-      title="Account & upgrade"
+      title="Accounts"
       style={{ cursor: "pointer" }}
       onClick={onOpen}
       onKeyDown={(e) => e.key === "Enter" && onOpen()}
@@ -443,13 +444,7 @@ function IdentityCard({ status, onOpen }: { status: Status; onOpen: () => void }
           Dojang attestation · testnet issuer
         </div>
       )}
-      {isLegacyDemo() &&
-        (status.demoReady === false ? (
-          <span className="chip-warn">⚠ Demo headroom low</span>
-        ) : (
-          <span className="chip-ok">Demo ready</span>
-        ))}
-      {!isLegacyDemo() && status.isOndolAccount && status.initialized && status.upgradeable === false && (
+      {status.isOndolAccount && status.initialized && status.upgradeable === false && (
         <span className="chip-warn" title="Created before upgradeable accounts. Open the account for details.">
           Not upgradeable
         </span>
@@ -458,8 +453,53 @@ function IdentityCard({ status, onOpen }: { status: Status; onOpen: () => void }
   );
 }
 
+/** Shown when the active account exists on this device but has no passkey linked
+ *  here (e.g. the demo account selected in production, or an imported account not
+ *  yet linked). Replaces the old raw "No passkey linked… Visit Upgrade first"
+ *  dead-end with a clear way out: switch, or create. */
+function NeedsLink({
+  status,
+  isDemo,
+  onLinkDemo,
+  onManage,
+  onCreate,
+}: {
+  status: Status;
+  isDemo: boolean;
+  onLinkDemo: () => void;
+  onManage: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <div>
+      <div className="screen-head">
+        <p className="eyebrow">PASSKEY NEEDED</p>
+        <h1 className="screen-title">Link a passkey</h1>
+      </div>
+      <div className="card center">
+        <div className="hero">This account isn't linked on this device.</div>
+        <p className="muted">
+          {status.upId ? `${status.upId}.up.id` : shortAddr(status.address)} has no passkey here, so
+          it can't sign. Switch to an account you control, or create a new one.
+        </p>
+        {isDemo && SHOW_DEMO && (
+          <button className="secondary wide" onClick={onLinkDemo}>
+            Link the demo passkey
+          </button>
+        )}
+        <button className="primary wide" onClick={onManage}>
+          Switch or add an account
+        </button>
+        <button className="secondary" onClick={onCreate}>
+          Create a new account
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("upgrade");
+  const [screen, setScreen] = useState<Screen>("send");
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [prefillRecipient, setPrefillRecipient] = useState<string | null>(null);
@@ -595,6 +635,10 @@ export default function App() {
   }
 
   const nav = (key: Screen) => setScreen(key);
+  // The active account is on this device but has no passkey linked here. Don't
+  // let any screen dead-end on "No passkey linked"; show a way out instead. The
+  // Upgrade screen is exempt — that's where a demo account links in dev.
+  const needsLink = !!status && !credentialFor(status.address) && screen !== "upgrade";
   const body = !status ? (
     error ? (
       <ErrNote error={error} />
@@ -603,9 +647,17 @@ export default function App() {
         <Spinner /> connecting to guardian…
       </div>
     )
+  ) : needsLink ? (
+    <NeedsLink
+      status={status}
+      isDemo={isLegacyDemo()}
+      onLinkDemo={() => setScreen("upgrade")}
+      onManage={() => setSwitcherOpen(true)}
+      onCreate={() => setAddingAccount(true)}
+    />
   ) : (
     <>
-      {screen === "upgrade" && <Upgrade status={status} onDone={() => setScreen("send")} />}
+      {SHOW_DEMO && screen === "upgrade" && <Upgrade status={status} onDone={() => setScreen("send")} />}
       {screen === "send" && (
         <Send status={status} refresh={refresh} prefillRecipient={prefillRecipient} />
       )}
@@ -687,7 +739,9 @@ export default function App() {
           onClose={() => setSwitcherOpen(false)}
           onSwitched={switchRefresh}
           onAddAccount={() => setAddingAccount(true)}
-          onOpenAccount={() => setScreen("upgrade")}
+          onOpenAccount={() => {
+            if (SHOW_DEMO) setScreen("upgrade"); // demo-only account/upgrade screen
+          }}
           onRecover={(address) => {
             // No passkey on this device matches. Switch to the account and run
             // Arise to rotate in a fresh passkey.

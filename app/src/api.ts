@@ -18,8 +18,6 @@ export interface Status {
   upgradeable?: boolean;
   initialized: boolean;
   accountNonce: string;
-  demoReady?: boolean;
-  demoRequiredWei?: string;
   /** Global: sponsored onboarding is paused (relayer below its floor). */
   sponsoredOnboardingPaused?: boolean;
 }
@@ -97,7 +95,6 @@ export const api = {
       "/arise/complete",
       post({ account, newX, newY, code }),
     ),
-  demoCredential: () => req<{ credentialId: string }>("/demo-credential"),
   /** O3: only an address, two signatures, and a public key ever travel. */
   onboard: (body: {
     address: Hex;

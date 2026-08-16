@@ -27,22 +27,30 @@ function requireEnv(name: string): `0x${string}` {
   return v as `0x${string}`;
 }
 
+// Dev-only guardian mode. A production guardian (Railway) does NOT set SUHO_DEV,
+// so the demo/alice surfaces below and the /upgrade + /demo-credential endpoints
+// simply don't exist there — no alice private key is ever loaded in production.
+export const SUHO_DEV = process.env.SUHO_DEV === "1";
+
 // Relayer pays gas; the same key owns SuhoCodeAttester (issuer role for recovery codes).
 export const relayerAccount = privateKeyToAccount(requireEnv("DEPLOYER_PRIVATE_KEY"));
-// Demo-only custody: alice's EOA key is held solely for the one-time 7702 upgrade
-// signature. See the custody note in the app spec / README.
-export const aliceAccount = privateKeyToAccount(requireEnv("ALICE_PRIVATE_KEY"));
 
 export const relayerWallet = createWalletClient({
   account: relayerAccount,
   chain: giwaSepolia,
   transport: http(),
 });
-export const aliceWallet = createWalletClient({
-  account: aliceAccount,
-  chain: giwaSepolia,
-  transport: http(),
-});
+
+// Demo-only custody: alice's EOA key signs her one-time 7702 upgrade. Loaded
+// ONLY in a dev guardian (SUHO_DEV=1). Null in production — there is no alice-key
+// surface at all off the dev box.
+export const aliceAccount =
+  SUHO_DEV && process.env.ALICE_PRIVATE_KEY
+    ? privateKeyToAccount(process.env.ALICE_PRIVATE_KEY as `0x${string}`)
+    : null;
+export const aliceWallet = aliceAccount
+  ? createWalletClient({ account: aliceAccount, chain: giwaSepolia, transport: http() })
+  : null;
 
 /// The public RPC is load-balanced and can serve stale state right after a tx
 /// (probe-verified). For post-tx assertions, read until two consecutive reads
