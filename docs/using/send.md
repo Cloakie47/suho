@@ -11,6 +11,8 @@ Type a up.id name or a 0x address in the recipient field. The app resolves it li
 
 Enter the amount and tap Send. Complete the passkey prompt. A toast tracks the transaction: pending, then "Sent" with the real measured confirmation time, then "Confirmed" with an explorer link.
 
+You can also attach a short public note to a send, and later ask a recipient to return a payment. See [Notes and return requests](/using/notes-and-requests).
+
 A verified send is proven live. [View the transaction.](https://sepolia-explorer.giwa.io/tx/0x5140fa4f8d3081b8f1accd82b1df4c157410cd055c888aead21463ff1263c8ec)
 
 ## The guard

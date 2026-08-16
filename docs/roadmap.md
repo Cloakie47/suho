@@ -1,6 +1,6 @@
 # Suho Roadmap
 
-Suho today is a guardian wallet on GIWA. It ships passkey accounts with gasless non-custodial onboarding, sends to up.id names instead of addresses, guards transfers against unverified recipients, recovers lost devices by email, and issues attested identity cards with on-chain version history. All of it runs live on GIWA Sepolia with verified contracts.
+Suho today is a guardian wallet on GIWA. It ships passkey accounts with gasless non-custodial onboarding, sends to up.id names instead of addresses, guards transfers against unverified recipients, recovers lost devices by email, issues attested identity cards with on-chain version history, and attaches public on-chain notes and verified return requests to payments. All of it runs live on GIWA Sepolia with verified contracts.
 
 The roadmap builds on one architectural fact. Suho is not only a wallet. It is a trust layer. Every account is a provably unique, KYC-attested human, and every transaction passes through a guard. The work ahead extracts that layer into infrastructure, makes verification portable, and builds finance that depends on it.
 
@@ -28,7 +28,7 @@ Sign in with Suho. A dApp adds one button and knows every user is a unique KYC-a
 
 A trust-ranked dApp directory. A discovery surface for GIWA dApps where users connect their Suho wallet directly, and where verified apps and verified counterparties are marked. It is a map of the ecosystem ranked by trust, not a flat list.
 
-Verified peer-to-peer transfers. OTC-style transfers between KYC'd counterparties, where both sides see each other's verified identity before funds move. This targets the P2P scam problem directly, because the counterparty is a provable person rather than an anonymous address.
+Verified peer-to-peer transfers. OTC-style transfers between KYC'd counterparties, where both sides see each other's verified identity before funds move. This targets the P2P scam problem directly, because the counterparty is a provable person rather than an anonymous address. The first step is live: payments now carry public on-chain notes and verified return requests, each anchored to a real transfer, with only a Dojang-verified human able to ask for a return. See [Notes and return requests](/using/notes-and-requests). The broader verified-messaging network, private channels and identity-gated conversations, remains ahead.
 
 Guarded dApp interactions. The transfer guard extends from who you pay to what you sign. Once Suho connects to dApps over WalletConnect, it inspects calldata and warns about malicious contracts and unlimited token approvals, the same way it warns about unverified recipients today. The guard covers the whole on-chain surface, not only payments.
 

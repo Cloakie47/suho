@@ -7,6 +7,7 @@ All contracts are live on GIWA Sepolia (chain id 91342). All Suho contracts are 
 | Contract | Address |
 | --- | --- |
 | SuhoCodeAttester | [`0x88645529532844C380b40AB68E335CC7a8a0f63B`](https://sepolia-explorer.giwa.io/address/0x88645529532844C380b40AB68E335CC7a8a0f63B) |
+| SuhoMemo (on-chain notes) | [`0x6999248c4C7B45da530511BDe7E386084d3D9835`](https://sepolia-explorer.giwa.io/address/0x6999248c4C7B45da530511BDe7E386084d3D9835) |
 | OndolTransferGuard (current) | [`0x4E395754311359Ac12a1005C69eac49E17046eBE`](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) |
 | OndolTransferGuard (superseded) | [`0x106953DB14B1183378976E128AE5cd40C4b493d2`](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) |
 | AriseModule | [`0x827375200CF4595f71b09497A65BAF10Ca907466`](https://sepolia-explorer.giwa.io/address/0x827375200CF4595f71b09497A65BAF10Ca907466) |
@@ -50,3 +51,4 @@ Every milestone is a live transaction.
 | Upgraded v1 to v2 in place | [`0x2a24…98af`](https://sepolia-explorer.giwa.io/tx/0x2a24fa95278db11517d9af46e9b43d9046784d82ab1f1cdec0972bd6316598af) |
 | Stranger onboarded gasless | [`0xf00b…ce42`](https://sepolia-explorer.giwa.io/tx/0xf00bd017430c9e0d6d25afc389767410f0a923820f0b701cdd7f7ce0b50bce42) |
 | Card self-attested through the account | [`0x5cbf…b167`](https://sepolia-explorer.giwa.io/tx/0x5cbfba2ea0e076948d6eeb411c349f47cb0b4fa91339cf3321098e1df08ab167) |
+| Public note emitted on chain (SuhoMemo) | [`0x15ff…409f`](https://sepolia-explorer.giwa.io/tx/0x15ffe4e3166b8506a2663ea93fd62e0cd88b83123283eb0aaa9dd56e1e31409f) |

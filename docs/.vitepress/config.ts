@@ -70,6 +70,7 @@ export default defineConfig({
         items: [
           { text: "Create an account", link: "/using/create-account" },
           { text: "Send and the guard", link: "/using/send" },
+          { text: "Notes and return requests", link: "/using/notes-and-requests" },
           { text: "Your Card", link: "/using/card" },
           { text: "Directory", link: "/using/directory" },
           { text: "Arise recovery", link: "/using/arise" },

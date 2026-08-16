@@ -14,6 +14,7 @@ and executed without incident. Deployer/issuer key: `DEPLOYER_*` in `.env`
 | OndolAccountV2 (impl, superseded, still supported for pinned accounts) | `0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69` | [view](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) | ✅ 2026-07-21 (Blockscout, Pass) |
 | OndolProxy (upgradeable 7702 target, current) | `0x5641D0D42bCD6450BE30077998Fe64F263A4887B` | [view](https://sepolia-explorer.giwa.io/address/0x5641D0D42bCD6450BE30077998Fe64F263A4887B) | ✅ 2026-07-24 (Blockscout, Pass) |
 | OndolAccountV3 (impl, current) | `0xff164E70038EB91c342981d95f1f59d04499399E` | [view](https://sepolia-explorer.giwa.io/address/0xff164E70038EB91c342981d95f1f59d04499399E) | ✅ 2026-07-24 (Blockscout, Pass) |
+| SuhoMemo (on-chain notes) | `0x6999248c4C7B45da530511BDe7E386084d3D9835` | [view](https://sepolia-explorer.giwa.io/address/0x6999248c4C7B45da530511BDe7E386084d3D9835) | ✅ 2026-08-15 (Blockscout, Pass) |
 
 Suho code schema UID (registered on the SchemaRegistry predeploy, resolver 0,
 revocable): `0x8f05c451eccf1fe63ba0518ad1f3338b92b7516eec60ea8ea9e528b20e49a3cf`, schema `bytes32 codeHash, string domain`.
@@ -29,6 +30,14 @@ Config: guard `otpThreshold` = 0.01 ether; accepted attester IDs from
 Post-deploy smoke test (live, both txs status 1): issued a throwaway code to
 alice under domain `suho.test:roundtrip-1`, `isCodeActive` true, then
 `verifyAndConsume` consumed it, `isCodeActive` false.
+
+Phase M (2026-08-15): SuhoMemo deployed and source-verified. It has one function,
+`note(address to, string text)`, which emits `Memo(from, to, text)` and holds no
+state. A send with a note appends `note()` to the same `execute()` batch as the
+transfer, so the note and the money land in one passkey-signed transaction. Notes
+are public on-chain events, read back by indexed sender/recipient. Return requests
+are guardian-stored (Postgres), anchored to a verified on-chain transfer; the
+guardian never stores a memo (those are on chain).
 
 Phase O (2026-07-21): OndolAccountV2 replaces the self-call-gated initialize
 with EIP-712 signature-gated `initializeWithSig` (low-s enforced) so a relayer
