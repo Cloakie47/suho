@@ -258,7 +258,10 @@ app.get("/fee", async (_req, res) => {
 // ---- GET /status?address=0x... ----
 app.get("/status", async (req, res) => {
   try {
-    const address = String(req.query.address) as Hex;
+    const address = String(req.query.address);
+    // Validate before touching the chain: a malformed address must yield a clean
+    // 400, not a 500 with a raw viem error (D3 input validation / E4 no raw trace).
+    if (!isAddr(address)) return res.status(400).json({ error: "invalid address" });
     const result = await coalesce(`status:${address.toLowerCase()}`, async () => {
     const [attester, upId, balance, code, implSlot] = await Promise.all([
       verifiedBy(address),
@@ -849,10 +852,6 @@ const CONFIRM_MAX_PER_HOUR = Number(process.env.SUHO_EMAIL_CONFIRM_MAX_PER_HOUR 
 const ARISE_MAX_PER_HOUR = Number(process.env.SUHO_ARISE_EMAIL_MAX_PER_HOUR ?? "3");
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const sixDigit = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
-const maskEmail = (e: string) => {
-  const [l, d] = e.split("@");
-  return `${l?.[0] ?? ""}•••@${d ?? ""}`;
-};
 const isAddr = (a: unknown): a is Hex => typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a);
 
 // Pending email-confirmation codes (transient, in memory). The DB records what
@@ -970,14 +969,17 @@ app.post("/recovery/confirm", async (req, res) => {
   }
 });
 
-// ---- GET /recovery?account= (on/off + masked email) ----
+// ---- GET /recovery?account= (on/off only) ----
+// Returns whether recovery is enabled, and deliberately NOT the masked email:
+// revealing the email to any caller was an enumeration/targeting leak (a stranger
+// could learn account X's recovery address). The masked email is no longer served
+// on any public endpoint; recovery delivery just goes to the address on file.
 app.get("/recovery", async (req, res) => {
   try {
     const account = String(req.query.account ?? "");
     if (!isAddr(account)) return res.status(400).json({ error: "invalid account" });
     const rec = await getRecovery(account);
-    if (!rec) return res.json({ enabled: false });
-    res.json({ enabled: true, maskedEmail: maskEmail(decryptEmail(rec.encrypted)) });
+    res.json({ enabled: rec !== null });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }

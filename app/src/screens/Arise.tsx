@@ -23,7 +23,6 @@ import { humanError, isUserCancel } from "../errors";
 interface Target {
   address: Hex;
   upId: string | null;
-  maskedEmail?: string;
 }
 
 type Stage =
@@ -100,7 +99,7 @@ export function Arise({ refresh, onDone }: { refresh: () => void; onDone?: () =>
         });
         return;
       }
-      setTarget({ address, upId: st.upId, maskedEmail: rec.maskedEmail });
+      setTarget({ address, upId: st.upId });
       setStage({ k: "found" });
     } catch (e) {
       setStage({ k: "error", message: humanError(e).text });
@@ -293,7 +292,7 @@ export function Arise({ refresh, onDone }: { refresh: () => void; onDone?: () =>
                 <>
                   <p className="okbox">
                     ✓ {target.upId ? `${target.upId}.up.id` : shortAddr(target.address)} — recovery is
-                    enabled{target.maskedEmail ? `; the code goes to ${target.maskedEmail}` : ""}.
+                    enabled. The code goes to the recovery email on file.
                   </p>
                   <p className="mono muted" style={{ fontSize: "0.8rem" }}>{target.address}</p>
                   <button className="primary wide" onClick={createNew} disabled={!!busy}>
@@ -325,9 +324,8 @@ export function Arise({ refresh, onDone }: { refresh: () => void; onDone?: () =>
               {stage.k === "code-sent" && (
                 <>
                   <p className="muted">
-                    A 6-digit code is on its way to{" "}
-                    {target?.maskedEmail ? <b>{target.maskedEmail}</b> : "the recovery email on file"}.
-                    Enter it below. Nothing is shown here — the code only reaches the bound email.
+                    A 6-digit code is on its way to <b>the recovery email on file</b>. Enter it below.
+                    Nothing is shown here — the code only reaches the bound email.
                   </p>
                   <input
                     type="text"

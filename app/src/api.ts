@@ -80,7 +80,7 @@ export const api = {
   //  passkey + hold-to-confirm, not a code. See Send.tsx / OndolTransferGuard.)
   // ---- H2: recovery binding ----
   recoveryStatus: (account: Hex) =>
-    req<{ enabled: boolean; maskedEmail?: string }>(`/recovery?account=${account}`),
+    req<{ enabled: boolean }>(`/recovery?account=${account}`),
   recoveryChallenge: (account: Hex) =>
     req<{ challenge: Hex }>(`/recovery/challenge?account=${account}`),
   recoveryRequestCode: (account: Hex, email: string, webauthn: AssertionPayload) =>

@@ -25,7 +25,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
   const toast = useToast();
 
   // H2: recovery binding state.
-  const [recovery, setRecovery] = useState<{ enabled: boolean; maskedEmail?: string } | null>(null);
+  const [recovery, setRecovery] = useState<{ enabled: boolean } | null>(null);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [recPhase, setRecPhase] = useState<"idle" | "code-sent">("idle");
@@ -190,7 +190,7 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
               </div>
             ) : recovered && !changing ? (
               <div className="muted">
-                Recovery is on. Codes go to <b>{recovery.maskedEmail}</b>.{" "}
+                Recovery is on. Codes go to your recovery email.{" "}
                 <button
                   className="linklike"
                   onClick={() => {
