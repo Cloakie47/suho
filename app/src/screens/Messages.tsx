@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { encodeFunctionData, parseAbi, type Hex } from "viem";
-import { ExternalLink, TriangleAlert, Undo2, X } from "lucide-react";
+import { ChevronDown, ExternalLink, TriangleAlert, Undo2, X } from "lucide-react";
 import {
   loadThreads,
   sentRequestsByTx,
@@ -108,8 +108,12 @@ export function RowRequestAction({
 /** The requests inbox surface: received active return requests with actions. */
 export function RequestsInbox({ msg }: { msg: MessagesState }) {
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
   const toast = useToast();
   const active = msg.activeRequests;
+  // Expand the first request by default; collapsed items show a one-line snippet
+  // so a long message never crowds the actions.
+  const open = openId ?? active[0]?.id ?? null;
   if (active.length === 0) return null;
 
   const returnFunds = async (m: TxMessageWire) => {
@@ -160,44 +164,49 @@ export function RequestsInbox({ msg }: { msg: MessagesState }) {
 
   return (
     <div className="card reqbox">
-      <h2>
+      <h3>
         Return requests <span className="req-count">{active.length}</span>
-      </h2>
-      {active.map((m) => (
-        <div className="msg-item" key={m.id}>
-          <div className="msg-facts">
-            <TriangleAlert size={15} color="var(--warn)" strokeWidth={1.5} />
-            <div>
-              <div className="msg-line">
-                <b>{amountLabel(m)}</b> from {shortAddr(m.from)}
+      </h3>
+      {active.map((m) => {
+        const isOpen = open === m.id;
+        return (
+          <div className={`req-item${isOpen ? " open" : ""}`} key={m.id}>
+            <button className="req-head" onClick={() => setOpenId(isOpen ? -1 : m.id)}>
+              <TriangleAlert size={15} color="var(--warn)" strokeWidth={1.5} style={{ flex: "none", marginTop: 2 }} />
+              <span className="req-line"><b>{amountLabel(m)}</b> from {shortAddr(m.from)}</span>
+              <ChevronDown className="req-caret" size={15} strokeWidth={1.75} />
+            </button>
+            {!isOpen && m.body && <div className="req-snippet">"{m.body}"</div>}
+            {isOpen && (
+              <div className="req-detail">
+                {m.body && <div className="req-body">"{m.body}"</div>}
+                <a className="req-txlink" href={`${EXPLORER}/tx/${m.txHash}`} target="_blank" rel="noreferrer">
+                  {shortAddr(m.txHash)} <ExternalLink size={11} strokeWidth={1.5} />
+                </a>
+                <div className="req-actions">
+                  <button className="primary sm" disabled={busyId === m.id} onClick={() => void returnFunds(m)}>
+                    <Undo2 size={13} strokeWidth={1.5} /> Return funds
+                  </button>
+                  <button className="secondary sm" disabled={busyId === m.id} onClick={() => void respond(m, "decline")}>
+                    Decline
+                  </button>
+                  <button className="ghost sm" disabled={busyId === m.id} onClick={() => void respond(m, "dismiss")}>
+                    Dismiss
+                  </button>
+                  <button
+                    className="ghost sm danger"
+                    disabled={busyId === m.id}
+                    onClick={() => void respond(m, "block")}
+                    title="Block this requester"
+                  >
+                    <X size={13} strokeWidth={1.5} /> Block
+                  </button>
+                </div>
               </div>
-              <a className="msg-txlink" href={`${EXPLORER}/tx/${m.txHash}`} target="_blank" rel="noreferrer">
-                {shortAddr(m.txHash)} <ExternalLink size={11} strokeWidth={1.5} />
-              </a>
-            </div>
+            )}
           </div>
-          {m.body && <div className="msg-body">"{m.body}"</div>}
-          <div className="msg-actions">
-            <button className="primary sm" disabled={busyId === m.id} onClick={() => void returnFunds(m)}>
-              <Undo2 size={13} strokeWidth={1.5} /> Return funds
-            </button>
-            <button className="secondary sm" disabled={busyId === m.id} onClick={() => void respond(m, "decline")}>
-              Decline
-            </button>
-            <button className="ghost sm" disabled={busyId === m.id} onClick={() => void respond(m, "dismiss")}>
-              Dismiss
-            </button>
-            <button
-              className="ghost sm danger"
-              disabled={busyId === m.id}
-              onClick={() => void respond(m, "block")}
-              title="Block this requester"
-            >
-              <X size={13} strokeWidth={1.5} /> Block
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

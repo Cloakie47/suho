@@ -534,8 +534,9 @@ app.get("/issuer", (_req, res) =>
 app.get("/issuer/codes", (_req, res) => res.status(410).json({ error: "retired; see /ops" }));
 
 // ---- GET /directory[?q=...][&refresh=1] ----
-// D1: active, verified up.id names only — this list IS the trust surface.
-// Search is server-side (the in-window name set is ~60k+); responses cap at 500.
+// D1: active up.id names — this list IS the trust surface. The name set is large
+// (~500k on this testnet), so search is server-side in Postgres and the <=500
+// names actually served are gated (owned + hasActiveName) fresh at serve time.
 app.get("/directory", async (req, res) => {
   try {
     const q = String(req.query.q ?? "");

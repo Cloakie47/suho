@@ -30,7 +30,7 @@ Three levels, used consistently: L0 page ink; L1 cards (ink-raised, 1px paper@6%
 
 ## R5. Screen-by-screen composition pass
 - Upgrade/success (currently a checkmark in a void): two-col success composition — left: the message + code + Continue; right: a rendered mini Suho Card preview or seal motif. No screen may be a single small element centered in emptiness.
-- Directory: table-like rows (seal, name, address mono, Send action on hover), sticky search, count header ("55,048 verified names").
+- Directory: table-like rows (seal, name, address mono, Send action on hover), sticky search, count header (live "names indexed" count, ~500k on this testnet).
 - Card screen: the card itself rendered at credit-card proportion with the L2 treatment + gentle 3D tilt on hover (shared component with the future landing hero); history as a timeline rail (seal dot = current, hollow = revoked with timestamp).
 - Arise: keep the theater, add composition — steps as a numbered rail (this IS a real sequence, numbering earns its place), the prove-it panel as two L1 cards side by side (old key ✗ / new key ✓).
 - OTP interstitial: L2 modal over dimmed ink, code boxes (6 individual inputs), countdown ring around the timer.

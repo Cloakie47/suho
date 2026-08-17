@@ -125,7 +125,7 @@ tells the story — don't force it.
 
 ## Act 6 — Directory + Card + close (3:00–3:30)
 
-1. Directory: 50k+ verified names as white table rows, a red seal on every
+1. Directory: 500k+ verified names as white table rows, a red seal on every
    one. Search your new name — *"only verified humans can appear here, by
    construction."* Deep-link Send off `suho`'s row (the Send button appears on
    hover).

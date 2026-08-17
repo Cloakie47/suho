@@ -247,20 +247,8 @@ export function Arise({ refresh, onDone }: { refresh: () => void; onDone?: () =>
         <h1 className="screen-title">Arise</h1>
       </div>
 
-      <div className="arise-layout">
-        <div className="step-rail" aria-label="Recovery steps">
-          {STEPS.map((label, i) => {
-            const s = stepState(stage, i);
-            return (
-              <div key={label} className={`step ${s}`}>
-                <span className="step-num">{s === "done" ? "✓" : i + 1}</span>
-                <span className="step-label">{label}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div>
+      <div className="cols">
+        <div className="main">
           {stage.k !== "arisen" && (
             <div className="card">
               <h2>Lost your device?</h2>
@@ -452,32 +440,50 @@ export function Arise({ refresh, onDone }: { refresh: () => void; onDone?: () =>
               <Spinner /> {busy}
             </div>
           )}
+        </div>
+
+        <div className="rail">
+          <div className="card">
+            <h3>Recovery steps</h3>
+            <div className="step-rail" aria-label="Recovery steps">
+              {STEPS.map((label, i) => {
+                const s = stepState(stage, i);
+                return (
+                  <div key={label} className={`step ${s}`}>
+                    <span className="step-num">{s === "done" ? "✓" : i + 1}</span>
+                    <span className="step-label">{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           {stage.k !== "arisen" && (
-            <div className="stat-grid" style={{ marginTop: 16 }}>
-              <div className="stat-card">
-                <div className="stat-label">Purpose-bound</div>
-                <div style={{ fontSize: "0.88rem" }}>
-                  The code commits to this account and the new key. It can't rotate in any other
-                  key.
-                </div>
-                <div className="stat-sub">domain: suho.arise:&lt;account&gt;:&lt;keyhash&gt;</div>
+            <>
+              <div className="card">
+                <h3>Purpose-bound</h3>
+                <p className="explain">
+                  The code commits to this account and the new key. It can't rotate in any other key.
+                </p>
+                <p className="mono" style={{ fontSize: "0.72rem", color: "var(--ink-dim)", marginTop: 8 }}>
+                  domain: suho.arise:&lt;account&gt;:&lt;keyhash&gt;
+                </p>
               </div>
-              <div className="stat-card">
-                <div className="stat-label">Single-use</div>
-                <div style={{ fontSize: "0.88rem" }}>
-                  Consumed on-chain the moment it verifies. A replayed code is dead.
-                </div>
-                <div className="stat-sub">EAS attestation · verifyAndConsume</div>
+              <div className="card">
+                <h3>Single-use</h3>
+                <p className="explain">
+                  Consumed on-chain the moment it verifies. A replayed code is dead — enforced by the
+                  attester's verifyAndConsume.
+                </p>
               </div>
-              <div className="stat-card">
-                <div className="stat-label">Relayable</div>
-                <div style={{ fontSize: "0.88rem" }}>
-                  Anyone may relay the recovery. The code itself is the authority.
-                </div>
-                <div className="stat-sub">no gas needed on the lost account</div>
+              <div className="card">
+                <h3>Relayable</h3>
+                <p className="explain">
+                  Anyone may relay the recovery. The code itself is the authority — no gas needed on
+                  the lost account.
+                </p>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

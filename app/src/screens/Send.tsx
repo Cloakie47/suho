@@ -11,7 +11,7 @@ import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { fetchActivity, peekActivity, type ActivityItem } from "../activity";
 import { humanError, isUserCancel } from "../errors";
-import { recordSend } from "../stats";
+import { recordSend, sessionStats } from "../stats";
 import { memoCall, sanitizeBody, MEMO_MAX } from "../messages";
 import { requestSendCode } from "../locks";
 
@@ -207,8 +207,14 @@ export function Send({
   const [note, setNote] = useState("");
   const [phase, setPhase] = useState<SendPhase>({ k: "idle" });
   const [actBump, setActBump] = useState(0);
+  const [verifiedNames, setVerifiedNames] = useState<number | null>(null);
   const debounceRef = useRef<number>();
   const toast = useToast();
+
+  // Verified-name count for the rail. One cached directory call on mount.
+  useEffect(() => {
+    api.directory("").then((r) => setVerifiedNames(r.total), () => setVerifiedNames(null));
+  }, []);
 
   // Directory deep-link (D2): arriving with a prefilled recipient starts resolution.
   useEffect(() => {
@@ -375,6 +381,8 @@ export function Send({
         <h1 className="screen-title">Send</h1>
       </div>
 
+      <div className="cols">
+        <div className="main">
       {/* composer hero card */}
       <div className="card hero-card">
         <div className="composer-row">
@@ -458,6 +466,42 @@ export function Send({
 
       {/* slim recent sends; full history lives on the Activity screen */}
       <RecentSends account={status.address} bump={actBump} />
+        </div>
+
+        {/* details rail */}
+        <div className="rail">
+          <div className="card">
+            <h3>This account</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              {status.isVerified ? <Seal small /> : <span className="gray-dot" aria-hidden="true" />}
+              <div>
+                <div style={{ fontWeight: 600 }}>{status.upId ? `${status.upId}.up.id` : "Suho account"}</div>
+                {status.isVerified && <div className="verified-label" style={{ fontSize: "0.8rem" }}>Verified human</div>}
+              </div>
+            </div>
+            <div className="statrow"><span className="k">Balance</span><span className="v">{fmtEth(status.balance)} ETH</span></div>
+            <div className="statrow"><span className="k">Guard</span><span className="lock-badge on">On</span></div>
+          </div>
+
+          <div className="card">
+            <h3>This session</h3>
+            <div className="statrow"><span className="k">Sends</span><span className="v">{sessionStats().sends}</span></div>
+            <div className="statrow">
+              <span className="k">Avg preconfirmation</span>
+              <span className="v jade">{sessionStats().avgMs === null ? "–" : `${(sessionStats().avgMs! / 1000).toFixed(1)}s`}</span>
+            </div>
+            <div className="statrow"><span className="k">Names indexed</span><span className="v">{verifiedNames === null ? "–" : verifiedNames.toLocaleString()}</span></div>
+          </div>
+
+          <div className="card">
+            <h3>How the guard works</h3>
+            <p className="explain">
+              Suho warns you before you pay a stranger. A large send to an unverified address stops for a
+              hold to confirm, then your passkey.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {phase.k === "confirm" && recipient && (
         <ConfirmModal

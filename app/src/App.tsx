@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isAddress, type Hex } from "viem";
 import {
   SendHorizontal,
   BookUser,
@@ -11,6 +12,8 @@ import {
   Download,
   Upload,
   BookOpen,
+  ChevronDown,
+  Search,
   type LucideIcon,
 } from "lucide-react";
 import { api, type Status } from "./api";
@@ -404,57 +407,6 @@ const NAV: { key: Screen; label: string; icon: LucideIcon }[] = [
   { key: "locks", label: "Protection", icon: ShieldCheck },
 ];
 
-/** Sidebar identity block: seal, name, copyable address, balance, attestation.
- *  Clicking it opens the Account/Upgrade screen (not in the main nav). */
-function IdentityCard({ status, onOpen }: { status: Status; onOpen: () => void }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard.writeText(status.address).catch(() => {});
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-  return (
-    <div
-      className="id-card"
-      role="button"
-      tabIndex={0}
-      title="Accounts"
-      style={{ cursor: "pointer" }}
-      onClick={onOpen}
-      onKeyDown={(e) => e.key === "Enter" && onOpen()}
-    >
-      <div className="id-top">
-        {status.isVerified && <Seal small />}
-        <div>
-          <div className="id-name">{status.upId ? `${status.upId}.up.id` : "Suho account"}</div>
-          <button
-            className="id-addr"
-            onClick={(e) => {
-              e.stopPropagation();
-              copy();
-            }}
-            title="Copy address"
-          >
-            {shortAddr(status.address)} {copied ? <Check size={11} /> : <Copy size={11} />}
-          </button>
-        </div>
-      </div>
-      <div className="id-balance">
-        {fmtEth(status.balance)} <small>ETH</small>
-      </div>
-      {status.isVerified && (
-        <div className="attestation-note" title={`Attester: ${status.verifiedBy}`}>
-          Dojang attestation · testnet issuer
-        </div>
-      )}
-      {status.isOndolAccount && status.initialized && status.upgradeable === false && (
-        <span className="chip-warn" title="Created before upgradeable accounts. Open the account for details.">
-          Not upgradeable
-        </span>
-      )}
-    </div>
-  );
-}
 
 /** Shown when the active account exists on this device but has no passkey linked
  *  here (e.g. the demo account selected in production, or an imported account not
@@ -497,6 +449,95 @@ function NeedsLink({
           Create a new account
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Global top-bar search. Resolves a up.id name or 0x address to a recipient,
+ *  DEBOUNCED (300ms) and CACHED per query, so typing never fires an RPC per
+ *  keystroke. A match routes into a prefilled Send. */
+type SearchHit = { address: Hex | null; upId: string | null; verified: boolean };
+const searchCache = new Map<string, SearchHit>();
+
+function GlobalSearch({ onSendTo }: { onSendTo: (q: string) => void }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [hit, setHit] = useState<SearchHit | "loading" | null>(null);
+  const debounce = useRef<number>();
+
+  useEffect(() => {
+    window.clearTimeout(debounce.current);
+    const query = q.trim();
+    if (!query) {
+      setHit(null);
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    const cached = searchCache.get(query.toLowerCase());
+    if (cached) {
+      setHit(cached);
+      return; // cache hit: zero network
+    }
+    setHit("loading");
+    debounce.current = window.setTimeout(async () => {
+      try {
+        let r: SearchHit;
+        if (isAddress(query)) {
+          const s = await api.status(query);
+          r = { address: query as Hex, upId: s.upId, verified: s.isVerified };
+        } else {
+          const res = await api.resolve(query);
+          const name = query.endsWith(".up.id") ? query.slice(0, -6) : query;
+          r = { address: res.address, upId: res.address ? name : null, verified: res.verified };
+        }
+        searchCache.set(query.toLowerCase(), r);
+        setHit(r);
+      } catch {
+        setHit({ address: null, upId: null, verified: false });
+      }
+    }, 300);
+  }, [q]);
+
+  const pick = () => {
+    if (hit && hit !== "loading" && hit.address) {
+      onSendTo(q.trim());
+      setQ("");
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="gsearch" onBlur={() => window.setTimeout(() => setOpen(false), 150)}>
+      <div className="gsearch-box">
+        <Search size={15} strokeWidth={1.75} />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onFocus={() => q.trim() && setOpen(true)}
+          onKeyDown={(e) => e.key === "Enter" && pick()}
+          placeholder="Find a name or address"
+          aria-label="Find a name or address"
+        />
+      </div>
+      {open && (
+        <div className="gsearch-pop">
+          {hit === "loading" && <div className="gsearch-empty"><Spinner /> resolving…</div>}
+          {hit !== "loading" && hit && hit.address && (
+            <button className="gsearch-hit" onMouseDown={pick}>
+              {hit.verified ? <Seal small /> : <span className="gray-dot" aria-hidden="true" />}
+              <span className="gsearch-hit-main">
+                <span className="gsearch-hit-name">{hit.upId ? `${hit.upId}.up.id` : shortAddr(hit.address)}</span>
+                <span className="gsearch-hit-sub mono">{hit.verified ? "Verified human · Send" : "Unverified · Send"}</span>
+              </span>
+              <SendHorizontal size={15} strokeWidth={1.5} />
+            </button>
+          )}
+          {hit !== "loading" && hit && !hit.address && (
+            <div className="gsearch-empty">No active name or account for that.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -680,63 +721,58 @@ export default function App() {
   );
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
+    <div className="app">
+      <header className="appbar">
         <a className="wordmark wordmark-home" href={LANDING_URL} title="Home — suho.wallet">
           Suho<span className="hanja">수호</span>
         </a>
-        {status && <IdentityCard status={status} onOpen={() => setSwitcherOpen(true)} />}
-        <nav className="nav" aria-label="Screens">
+        {status && <GlobalSearch onSendTo={(q) => { setPrefillRecipient(q); setScreen("send"); }} />}
+        <div className="appbar-right">
+          <a className="appbar-link" href={DOCS_URL} target="_blank" rel="noreferrer" title="Docs">
+            <BookOpen size={16} strokeWidth={1.75} />
+          </a>
+          <a className="appbar-link" href={GITHUB_URL} target="_blank" rel="noreferrer" title="GitHub">
+            <GithubMark size={15} />
+          </a>
+          <span className="status-pill" title="Network">
+            <span className={`dot${error != null ? " err" : ""}`} /> GIWA Sepolia
+          </span>
+          {status && (
+            <button className="acct-chip" onClick={() => setSwitcherOpen(true)} title="Switch account" aria-haspopup="menu">
+              {status.isVerified ? <Seal small /> : <span className="gray-dot" aria-hidden="true" />}
+              <span className="acct-chip-text">
+                <span className="acct-name">{status.upId ? `${status.upId}.up.id` : "Suho account"}</span>
+                <span className="acct-addr">{shortAddr(status.address)}</span>
+              </span>
+              <ChevronDown size={15} strokeWidth={1.75} />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {status && (
+        <nav className="navtabs" aria-label="Screens">
           {NAV.map((n) => (
             <button
               key={n.key}
-              className={`nav-item${screen === n.key ? " active" : ""}`}
+              className={`navtab${screen === n.key ? " active" : ""}`}
               onClick={() => nav(n.key)}
             >
-              <n.icon size={18} strokeWidth={1.5} />
+              <n.icon size={16} strokeWidth={1.5} />
               {n.label}
             </button>
           ))}
         </nav>
-        <div className="side-foot">
-          <a className="side-link" href={DOCS_URL} target="_blank" rel="noreferrer">
-            <BookOpen size={14} strokeWidth={1.75} /> Docs
-          </a>
-          <a className="side-link" href={GITHUB_URL} target="_blank" rel="noreferrer">
-            <GithubMark size={14} /> GitHub
-          </a>
-        </div>
-      </aside>
+      )}
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="topbar-m">
-          <a className="wordmark wordmark-home" style={{ padding: 0 }} href={LANDING_URL} title="Home">
-            Suho<span className="hanja">수호</span>
-          </a>
-          {status && (
-            <button
-              className="bal"
-              style={{ background: "none", border: 0, color: "inherit", cursor: "pointer" }}
-              onClick={() => setSwitcherOpen(true)}
-              title="Accounts"
-            >
-              {fmtEth(status.balance)} ETH
-            </button>
+      <main className="main">
+        <div className="content">
+          {status && error != null && (
+            <div className="status-banner" role="status">{humanError(error).text}</div>
           )}
+          {body}
         </div>
-        <main className="main">
-          <div className="content">
-            {/* Status only when broken: a slim banner when the last guardian
-                poll failed (unreachable, or RPC failing). Gone when healthy. */}
-            {status && error != null && (
-              <div className="status-banner" role="status">
-                {humanError(error).text}
-              </div>
-            )}
-            {body}
-          </div>
-        </main>
-      </div>
+      </main>
 
       {switcherOpen && (
         <AccountSwitcher
@@ -757,19 +793,6 @@ export default function App() {
           }}
         />
       )}
-
-      <nav className="tabbar" aria-label="Screens">
-        {NAV.map((n) => (
-          <button
-            key={n.key}
-            className={`tab-item${screen === n.key ? " active" : ""}`}
-            onClick={() => nav(n.key)}
-          >
-            <n.icon size={18} strokeWidth={1.5} />
-            {n.label}
-          </button>
-        ))}
-      </nav>
     </div>
   );
 }

@@ -145,8 +145,8 @@ export function Card({ status }: { status: Status }) {
           <Spinner /> loading card…
         </div>
       ) : (
-        <div className="card-layout">
-          <div>
+        <div className="cols">
+          <div className="main">
             {info.current ? (
               <>
                 <VCard
@@ -251,18 +251,25 @@ export function Card({ status }: { status: Status }) {
             {phase.k === "error" && <div className="errbox">{phase.message}</div>}
           </div>
 
-          <div>
+          <div className="rail">
             {info.history.length > 0 ? (
               <CardHistory history={info.history} />
             ) : (
               <div className="card">
-                <h2>Versions</h2>
-                <p className="muted">
+                <h3>Versions</h3>
+                <p className="explain">
                   Every edit becomes a new attested version; the refUID chain is the history. Nothing
                   is ever deleted.
                 </p>
               </div>
             )}
+            <div className="card">
+              <h3>How the card works</h3>
+              <p className="explain">
+                Your passkey signs each version onto EAS; the seal attests the human, the fields are
+                your own claims. Anyone can verify the read-only view without a wallet.
+              </p>
+            </div>
           </div>
         </div>
       )}

@@ -90,7 +90,111 @@ export async function initDb(): Promise<void> {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (blocker_address, blocked_address)
     );
+
+    -- Persistent scan caches. The directory (up.id names) and card (EAS
+    -- attestation uids) enumerations used to live only in memory, so every
+    -- guardian restart re-scanned from a fixed historical block over the
+    -- rate-limited RPC (150s). Now the derived state + a last-scanned-block cursor
+    -- persist here: boot loads instantly, refresh scans only NEW blocks.
+    CREATE TABLE IF NOT EXISTS scan_cursors (
+      name       TEXT PRIMARY KEY,       -- 'directory' | 'card'
+      last_block NUMERIC NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    -- Raw registered-name set (name + owner from the NameRegistered event). The
+    -- directory LAZY-GATES: it never eagerly gates all ~500k names (that cost a
+    -- ~13-min cold build, ~150MB residency, and a 12s boot). Instead this holds the
+    -- whole honest name set; a request searches it in SQL and gates only the <=500
+    -- names it actually serves, fresh. Owner is indexed for address search.
+    CREATE TABLE IF NOT EXISTS directory_names (
+      name       TEXT PRIMARY KEY,
+      owner      TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS directory_names_owner_idx ON directory_names (owner);
+    CREATE TABLE IF NOT EXISTS card_uids (
+      address    TEXT NOT NULL,
+      uid        TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (address, uid)
+    );
+    -- One-time migration off the earlier eager-gated table: its address column
+    -- held the gated owner, so it seeds the raw name set. Then drop it; lazy-gating
+    -- makes it obsolete. Idempotent (a no-op once the table is gone).
+    DO $$
+    BEGIN
+      IF to_regclass('public.directory_entries') IS NOT NULL THEN
+        INSERT INTO directory_names (name, owner)
+          SELECT name, address FROM directory_entries
+          ON CONFLICT (name) DO NOTHING;
+        DROP TABLE directory_entries;
+      END IF;
+    END $$;
   `);
+}
+
+// ---- persistent scan caches (directory + card) ----
+
+export async function getScanCursor(name: string): Promise<bigint> {
+  const { rows } = await db().query(`SELECT last_block FROM scan_cursors WHERE name = $1`, [name]);
+  return rows[0] ? BigInt(rows[0].last_block) : 0n;
+}
+export async function setScanCursor(name: string, block: bigint): Promise<void> {
+  await db().query(
+    `INSERT INTO scan_cursors (name, last_block, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (name) DO UPDATE SET last_block = EXCLUDED.last_block, updated_at = now()`,
+    [name, block.toString()],
+  );
+}
+
+export interface DirNameRow { name: string; owner: string }
+/// Search the raw name set in SQL (name OR owner substring), newest-agnostic
+/// alphabetical, capped. The caller gates the returned slice fresh. Empty query
+/// returns the first `limit` names.
+export async function searchDirectoryNames(q: string, limit: number): Promise<DirNameRow[]> {
+  const needle = q.trim();
+  const { rows } = await db().query(
+    `SELECT name, owner FROM directory_names
+       WHERE $1 = '' OR name ILIKE '%' || $1 || '%' OR owner ILIKE '%' || $1 || '%'
+     ORDER BY name
+     LIMIT $2`,
+    [needle, limit],
+  );
+  return rows.map((r) => ({ name: r.name, owner: r.owner }));
+}
+export async function countDirectoryNames(): Promise<number> {
+  const { rows } = await db().query(`SELECT count(*)::int AS c FROM directory_names`);
+  return rows[0]?.c ?? 0;
+}
+/// Upsert raw (name, owner) pairs from the scan. Chunked: the registry holds ~500k
+/// names, so one INSERT with half-a-million-element arrays would balloon the pg
+/// wire message. 5k rows/query keeps each round-trip small.
+export async function upsertDirectoryNames(rows: DirNameRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  const CHUNK = 5000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const slice = rows.slice(i, i + CHUNK);
+    await db().query(
+      `INSERT INTO directory_names (name, owner, updated_at)
+         SELECT n, o, now() FROM unnest($1::text[], $2::text[]) AS t(n, o)
+       ON CONFLICT (name) DO UPDATE SET owner = EXCLUDED.owner, updated_at = now()`,
+      [slice.map((e) => e.name), slice.map((e) => e.owner)],
+    );
+  }
+}
+
+export async function loadCardUids(): Promise<{ address: string; uid: string }[]> {
+  const { rows } = await db().query(`SELECT address, uid FROM card_uids`);
+  return rows.map((r) => ({ address: r.address, uid: r.uid }));
+}
+export async function upsertCardUids(pairs: { address: string; uid: string }[]): Promise<void> {
+  if (pairs.length === 0) return;
+  await db().query(
+    `INSERT INTO card_uids (address, uid, updated_at)
+       SELECT a, u, now() FROM unnest($1::text[], $2::text[]) AS t(a, u)
+     ON CONFLICT (address, uid) DO NOTHING`,
+    [pairs.map((p) => p.address), pairs.map((p) => p.uid)],
+  );
 }
 
 // ---- Phase M: transaction-attached messages ----

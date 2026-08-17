@@ -27,6 +27,23 @@ if (stage && card && !reducedMotion && matchMedia("(pointer: fine)").matches) {
   });
 }
 
+// live "names indexed" count — the registry grows, so read the real total from
+// the guardian rather than shipping a number that drifts stale. A no-match query
+// keeps it light (total is the full registry count regardless of the query); the
+// static HTML is the fallback if the guardian is unreachable.
+const GUARDIAN = "https://api.suhowallet.com";
+const countEl = document.getElementById("names-indexed");
+if (countEl) {
+  fetch(`${GUARDIAN}/directory?q=zzzzzzzznomatch`)
+    .then((r) => r.json())
+    .then((d) => {
+      if (typeof d.total === "number" && d.total > 0) {
+        countEl.textContent = `${d.total.toLocaleString()} verified names indexed`;
+      }
+    })
+    .catch(() => {});
+}
+
 // scroll reveals
 const io = new IntersectionObserver(
   (entries) => {

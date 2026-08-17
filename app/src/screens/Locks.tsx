@@ -103,6 +103,8 @@ export function Locks({ status, refresh }: { status: Status; refresh: () => void
         factor they don't have: a code sent to your recovery email.
       </p>
 
+      <div className="cols">
+        <div className="main">
       {!v4 && (
         <div className="card">
           <div className="lock-row">
@@ -152,13 +154,34 @@ export function Locks({ status, refresh }: { status: Status; refresh: () => void
             onEnable={() => run("Turning on the large-send check…", () => enableEmailLargeSendLock(account))}
             onDisable={() => startDisable("send")}
           />
-
-          <p className="muted" style={{ fontSize: "0.82rem", marginTop: 12 }}>
-            These protect you if your device passkey is stolen. They do not protect you if your
-            recovery email is also compromised.
-          </p>
         </>
       )}
+        </div>
+
+        <div className="rail">
+          <div className="card">
+            <h3>This account</h3>
+            <div className="statrow"><span className="k">Version</span><span className="v">{v4 ? "V4 (locks available)" : "V3"}</span></div>
+            <div className="statrow"><span className="k">Recovery email</span><span className="v">{recoveryOn === null ? "–" : recoveryOn ? "On" : "Off"}</span></div>
+            <div className="statrow"><span className="k">Control lock</span><span className="v">{v4 && locks.sensitiveOpLock ? "On" : "Off"}</span></div>
+            <div className="statrow"><span className="k">Large-send check</span><span className="v">{v4 && locks.emailLargeSendLock ? "On" : "Off"}</span></div>
+          </div>
+          <div className="card">
+            <h3>How a lock works</h3>
+            <p className="explain">
+              A locked action needs 2-of-2: your passkey <b>and</b> a 6-digit code emailed to your
+              recovery address. The device thief has the first, never the second.
+            </p>
+          </div>
+          <div className="card">
+            <h3>What it can't stop</h3>
+            <p className="explain">
+              These protect you if your device passkey is stolen. They do not protect you if your
+              recovery email is also compromised.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {flow.k === "code" && (
         <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Enter security code">
