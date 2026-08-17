@@ -151,8 +151,19 @@ a:hover { text-decoration: underline; }
   transition: color 160ms var(--ease);
 }
 .navtab:hover { color: var(--ink); }
-.navtab.active { color: var(--seal-deep); border-bottom-color: var(--seal); font-weight: 600; }
+/* Approved treatment: seal-red underline + ink text, no border box. The global
+   :focus-visible ring would draw a red box around the button, so suppress it here
+   and use the underline as the keyboard-focus indicator too. */
+.navtab.active { color: var(--ink); border-bottom-color: var(--seal); font-weight: 600; }
+.navtab:focus-visible { outline: none; border-bottom-color: var(--seal); }
 .navtab svg { flex: none; }
+/* inbox badge: a small seal-red oval with the pending-return-request count */
+.nav-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--seal); color: #fff; font-size: 0.7rem; font-weight: 600;
+  font-family: var(--font-mono); line-height: 1;
+}
 
 .main { flex: 1; min-width: 0; }
 .content { max-width: 1180px; margin: 0 auto; padding: 28px 28px 64px; }
@@ -246,7 +257,8 @@ a:hover { text-decoration: underline; }
 }
 
 /* ================= controls ================= */
-input[type="text"], input[type="number"] {
+input[type="text"], input[type="number"], input[type="email"],
+input[type="password"], input[type="search"], input[type="tel"], input[type="url"] {
   width: 100%; padding: 11px 14px; border-radius: 10px;
   border: 1px solid var(--line-strong); background: #ffffff; color: var(--ink);
   font-size: 0.95rem; font-family: var(--font-body); outline: none;
@@ -586,6 +598,13 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
   cursor: pointer; padding: 4px 6px; border-radius: 6px;
 }
 .switch-x:hover { color: var(--danger); }
+.switch-copy {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  border: 0; background: none; color: var(--ink-dim); cursor: pointer;
+  padding: 5px 6px; border-radius: 6px;
+}
+.switch-copy:hover { color: var(--seal); }
+.switch-copy.copied { color: var(--jade); }
 
 /* plain hairline divider (tile curve retired) */
 .hairline { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
@@ -707,8 +726,9 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 
 /* return-request row control */
 .ret-btn {
-  padding: 5px 11px; border: 1px solid var(--line-strong); border-radius: 8px;
+  padding: 7px 14px; border: 1px solid var(--line-strong); border-radius: 8px;
   background: none; color: var(--ink); font-size: 0.8rem; font-family: var(--font-body); cursor: pointer;
+  white-space: nowrap;
 }
 .ret-btn:hover { border-color: var(--seal); color: var(--seal); }
 .ret-na { font-size: 0.78rem; color: var(--ink-dim); }
@@ -801,7 +821,7 @@ button.ghost.danger { color: var(--danger); border-color: rgba(194, 59, 53, 0.4)
 .rowmain { display: flex; align-items: center; gap: 11px; }
 .rowtitle { font-size: 0.92rem; }
 .ms { font-family: var(--font-mono); font-size: 0.72rem; color: var(--jade); }
-.act-cell { display: flex; align-items: center; justify-content: flex-end; gap: 10px; white-space: nowrap; }
+.act-cell { display: flex; align-items: center; justify-content: flex-end; gap: 16px; white-space: nowrap; padding-left: 16px; }
 .act-cell .act-link { opacity: 0.55; }
 .tbl tr:hover .act-link { opacity: 1; }
 

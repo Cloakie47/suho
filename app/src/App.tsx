@@ -72,6 +72,7 @@ function AccountSwitcher({
   const [addBusy, setAddBusy] = useState(false);
   const [addErr, setAddErr] = useState<string | null>(null);
   const [ioMsg, setIoMsg] = useState<string | null>(null);
+  const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const current = activeAccount()?.toLowerCase() ?? "";
   const hasDemo = knownAccounts().some((a) => a.toLowerCase() === DEMO_ACCOUNT.toLowerCase());
@@ -169,6 +170,17 @@ function AccountSwitcher({
       await link(a as `0x${string}`); // straight into the passkey pick
     } finally {
       setAddBusy(false);
+    }
+  };
+
+  /** Copy the full account address to the clipboard, with a brief tick. */
+  const copyAddr = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddr(address);
+      window.setTimeout(() => setCopiedAddr((c) => (c === address ? null : c)), 1500);
+    } catch {
+      /* clipboard blocked — no-op */
     }
   };
 
@@ -287,6 +299,14 @@ function AccountSwitcher({
                       {linking === r.address ? "…" : "Link"}
                     </button>
                   )}
+                  <button
+                    className={`switch-copy${copiedAddr === r.address ? " copied" : ""}`}
+                    aria-label={copiedAddr === r.address ? "Address copied" : "Copy address"}
+                    title="Copy address"
+                    onClick={() => copyAddr(r.address)}
+                  >
+                    {copiedAddr === r.address ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.75} />}
+                  </button>
                   <button className="switch-x" aria-label="Forget account" onClick={() => remove(r.address)}>
                     ×
                   </button>
@@ -390,6 +410,7 @@ import { ErrNote, GithubMark, Seal, Spinner, fmtEth, shortAddr } from "./ui";
 import { Upgrade } from "./screens/Upgrade";
 import { Send } from "./screens/Send";
 import { Activity } from "./screens/Activity";
+import { useMessages } from "./screens/Messages";
 import { Locks } from "./screens/Locks";
 import { Arise } from "./screens/Arise";
 import { Directory } from "./screens/Directory";
@@ -556,6 +577,18 @@ export default function App() {
   // until the user has actually recovered one.
   const [recovering, setRecovering] = useState(false);
 
+  // Activity inbox badge: pending received return requests. `reqBump` re-fetches
+  // on the same cadence as the status poll; the badge clears once Activity is
+  // viewed (acked to the current count) and returns only when new ones arrive.
+  const [reqBump, setReqBump] = useState(0);
+  const reqMsg = useMessages(status?.address ?? null, reqBump);
+  const pendingReq = reqMsg.activeRequests.length;
+  const [ackedReq, setAckedReq] = useState(0);
+  useEffect(() => {
+    if (screen === "activity") setAckedReq(pendingReq);
+  }, [screen, pendingReq]);
+  const showReqBadge = pendingReq > ackedReq;
+
   const switchRefresh = useCallback(() => {
     lockMessages(); // drop the previous account's in-memory action session
     setStatus(null);
@@ -591,7 +624,10 @@ export default function App() {
     // when the tab becomes visible again so it never shows stale data on return.
     // (12s, up from 5s; post-write flows do their own immediate refetch.)
     const tick = () => {
-      if (!document.hidden) refresh();
+      if (!document.hidden) {
+        refresh();
+        setReqBump((b) => b + 1); // re-fetch inbox for the Activity badge
+      }
     };
     const t = window.setInterval(tick, 12000);
     const onVisible = () => {
@@ -760,6 +796,11 @@ export default function App() {
             >
               <n.icon size={16} strokeWidth={1.5} />
               {n.label}
+              {n.key === "activity" && showReqBadge && (
+                <span className="nav-badge" aria-label={`${pendingReq} pending return request${pendingReq === 1 ? "" : "s"}`}>
+                  {pendingReq}
+                </span>
+              )}
             </button>
           ))}
         </nav>
