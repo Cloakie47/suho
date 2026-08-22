@@ -18,6 +18,15 @@ function db(): pg.Pool {
   // Managed Postgres (Railway) terminates TLS; allow it without a local CA.
   const ssl = /localhost|127\.0\.0\.1/.test(connectionString) ? undefined : { rejectUnauthorized: false };
   pool = new pg.Pool({ connectionString, ssl, max: 5, idleTimeoutMillis: 30_000 });
+  // A pg Pool emits 'error' when an IDLE client's connection drops — managed
+  // Postgres and its public proxy cull idle sockets routinely. With NO listener
+  // Node treats it as an unhandled 'error' and crashes the whole process (this took
+  // the guardian down on a transient idle-drop). Handle it: log and continue. The
+  // failed client is already evicted from the pool; the next query opens a fresh
+  // connection, so a dropped idle socket is a non-event instead of a hard crash.
+  pool.on("error", (err) => {
+    console.error("[db] idle client error (recovered, pool continues):", err.message);
+  });
   return pool;
 }
 
