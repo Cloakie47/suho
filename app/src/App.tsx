@@ -416,6 +416,7 @@ import { Arise } from "./screens/Arise";
 import { Directory } from "./screens/Directory";
 import { Card } from "./screens/Card";
 import { Verify } from "./screens/Verify";
+import { Connect } from "./screens/Connect";
 
 type Screen = "upgrade" | "send" | "activity" | "directory" | "card" | "arise" | "limits";
 
@@ -650,6 +651,12 @@ export default function App() {
     window.addEventListener("hashchange", readHash);
     return () => window.removeEventListener("hashchange", readHash);
   }, []);
+
+  // Horizon 1 / S1.2: the dApp-SDK popup surface. Standalone (no wallet shell);
+  // it runs the postMessage handshake and, if needed, onboarding right here.
+  if (window.location.hash.replace(/^#/, "").startsWith("/connect")) {
+    return <Connect />;
+  }
 
   if (verifyId) {
     return (

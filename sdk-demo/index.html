@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Suhoswap · Sign in with Suho (SDK demo)</title>
+  <style>
+    :root {
+      --hanji: #faf7f0; --raised: #fff; --ink: #1c1917; --dim: #6e6862;
+      --line: #e8e2d8; --seal: #d93a25; --seal-deep: #a82415; --jade: #3e7a5e;
+      --mono: "IBM Plex Mono", Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--hanji); color: var(--ink);
+      font-family: system-ui, "Segoe UI", sans-serif; line-height: 1.5;
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    }
+    header { width: 100%; border-bottom: 1px solid var(--line); background: var(--raised); }
+    .bar { max-width: 720px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; gap: 10px; }
+    .logo { font-weight: 700; font-size: 1.15rem; }
+    .logo .k { color: var(--seal-deep); }
+    .tag { color: var(--dim); font-size: 0.82rem; margin-left: auto; }
+    main { max-width: 720px; width: 100%; padding: 40px 24px; }
+    h1 { font-size: 1.8rem; margin: 0 0 6px; }
+    .lead { color: var(--dim); margin: 0 0 28px; }
+    .card { background: var(--raised); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-bottom: 18px; }
+    .card h2 { font-size: 1.05rem; margin: 0 0 4px; }
+    .card p { color: var(--dim); font-size: 0.9rem; margin: 0 0 16px; }
+    button {
+      border: none; border-radius: 10px; padding: 12px 22px; font-size: 0.98rem; font-weight: 600;
+      background: linear-gradient(135deg, var(--seal), var(--seal-deep)); color: #fff; cursor: pointer;
+    }
+    button.ghost { background: none; border: 1px solid var(--line); color: var(--ink); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .result { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px; display: none; }
+    .result.show { display: block; }
+    .kv { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+    .kv:last-child { border-bottom: 0; }
+    .kv .k { color: var(--dim); }
+    .kv .v { font-family: var(--mono); font-size: 0.82rem; word-break: break-all; text-align: right; }
+    .verified { color: var(--jade); font-weight: 600; }
+    .failed { color: var(--seal); font-weight: 600; }
+    a { color: var(--seal-deep); }
+    pre { background: var(--hanji); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 0.78rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; }
+    details.sig { margin-top: 12px; }
+    details.sig summary { cursor: pointer; color: var(--dim); font-size: 0.82rem; user-select: none; }
+    details.sig summary:hover { color: var(--ink); }
+    .err { color: var(--seal); font-size: 0.85rem; margin-top: 10px; }
+    .seal { display: inline-grid; place-items: center; width: 26px; height: 26px; border: 2px solid var(--seal); border-radius: 6px; color: var(--seal); font-size: 0.7rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <span class="logo">Suho<span class="k">swap</span></span>
+      <span class="tag">a demo dApp on GIWA</span>
+    </div>
+  </header>
+  <main>
+    <h1>Sign in with Suho</h1>
+    <p class="lead">This page uses <code>@suho/ondol</code>. No wallet extension, no seed phrase. One passkey tap in a Suho popup, and first-time users onboard right inside it.</p>
+
+    <div class="card">
+      <h2>1 · Connect + sign in</h2>
+      <p>Opens the Suho popup, connects your account, and proves it with a SIWE signature verified on-chain via ERC-1271.</p>
+      <div class="row">
+        <button id="signin">Sign in with Suho</button>
+        <button id="disconnect" class="ghost" style="display:none">Disconnect</button>
+      </div>
+      <div class="result" id="signinResult"></div>
+      <div class="err" id="signinErr"></div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Sign a message</h2>
+      <p>Sign any text with your passkey. The demo verifies the signature on-chain and shows the result.</p>
+      <div class="row">
+        <input id="msg" value="gm from the Suho SDK demo" style="flex:1;min-width:200px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-size:0.95rem" />
+        <button id="sign" disabled>Sign message</button>
+      </div>
+      <div class="result" id="signResult"></div>
+      <div class="err" id="signErr"></div>
+    </div>
+  </main>
+  <script type="module" src="./demo.js"></script>
+</body>
+</html>

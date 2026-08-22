@@ -63,6 +63,27 @@ export class NotUpgradeableError extends Error {
   }
 }
 
+/** Bring `account` to V5 if it isn't already, then return. IDEMPOTENT and driven
+ *  by GROUND TRUTH: it reads the live ERC-1967 slot (fresh, retried) for the
+ *  current impl — never the possibly-stale /status field — so it picks the correct
+ *  upgradeTo selector (V3 one-arg vs V4+ two-arg) and no-ops when already V5. An
+ *  empty slot means a non-proxy pinned account: NotUpgradeableError, not a revert.
+ *  `onBridge` fires only when an actual upgrade tx is about to run (so the caller
+ *  can show "Preparing…" for the real first-time case, and nothing when V5). */
+export async function ensureV5(account: Hex, onBridge?: () => void): Promise<void> {
+  const impl = await readImpl(account); // ground truth from the proxy's slot
+  if (!impl) throw new NotUpgradeableError(); // no proxy slot = pinned / non-proxy
+  const cur = impl.toLowerCase();
+  if (cur === ONDOL_V5_IMPL.toLowerCase()) return; // already V5 — nothing to do
+  onBridge?.();
+  // V3 exposes one-arg upgradeTo(address); V4 (and any V4-descendant) two-arg
+  // upgradeTo(address, string). Empty code is ignored unless a control lock is on.
+  const data =
+    cur === ONDOL_V3_IMPL.toLowerCase()
+      ? encodeFunctionData({ abi: upgradeV3Abi, functionName: "upgradeTo", args: [ONDOL_V5_IMPL] })
+      : encodeFunctionData({ abi: upgradeV4Abi, functionName: "upgradeTo", args: [ONDOL_V5_IMPL, ""] });
+  await executeWithPasskey(selfCall(account, data));
+}
 export async function enableSensitiveOpLock(account: Hex): Promise<Hex> {
   const data = encodeFunctionData({ abi: v4Abi, functionName: "enableSensitiveOpLock", args: [] });
   return (await executeWithPasskey(selfCall(account, data))).txHash;

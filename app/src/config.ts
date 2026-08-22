@@ -103,6 +103,37 @@ export function isLegacyDemo(): boolean {
   return a !== null && a.toLowerCase() === DEMO_ACCOUNT.toLowerCase();
 }
 
+/** Horizon 1: per-origin dApp connections the user has approved (eth_requestAccounts).
+ *  Stored on the Suho origin, keyed by the dApp origin, revocable from Protection.
+ *  This is a local convenience record, not an authority — every sign still needs a tap. */
+const LS_CONNECTIONS = "suho.connections";
+export function rememberConnection(origin: string, address: string): void {
+  try {
+    const m = JSON.parse(localStorage.getItem(LS_CONNECTIONS) ?? "{}");
+    m[origin] = { address, at: Date.now() };
+    localStorage.setItem(LS_CONNECTIONS, JSON.stringify(m));
+  } catch {
+    /* storage blocked — connections just won't persist */
+  }
+}
+export function connectedSites(): { origin: string; address: string }[] {
+  try {
+    const m = JSON.parse(localStorage.getItem(LS_CONNECTIONS) ?? "{}");
+    return Object.entries(m).map(([origin, v]) => ({ origin, address: String((v as { address: string }).address) }));
+  } catch {
+    return [];
+  }
+}
+export function forgetConnection(origin: string): void {
+  try {
+    const m = JSON.parse(localStorage.getItem(LS_CONNECTIONS) ?? "{}");
+    delete m[origin];
+    localStorage.setItem(LS_CONNECTIONS, JSON.stringify(m));
+  } catch {
+    /* no-op */
+  }
+}
+
 /** Accounts this device knows (skill v2: there is no logout, there are
  *  accounts). Registry of addresses only. */
 export function knownAccounts(): `0x${string}`[] {
