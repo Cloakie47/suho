@@ -48,8 +48,11 @@ export const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO =
 // with whatever is actually deployed.
 const hex = (a: string) => a as `0x${string}`;
 export const GUARD_ADDRESS = hex(deployments.ondolTransferGuard);
+// Bank-model limits guard — the default policy for new accounts (Horizon: Limits).
+export const SPENDING_GUARD_ADDRESS = hex(deployments.ondolSpendingGuard);
 export const ARISE_ADDRESS = hex(deployments.ariseModule);
 export const ONDOL_PROXY = hex(deployments.ondolProxy);
+export const ONDOL_V5_IMPL = hex(deployments.ondolAccountV5Impl);
 export const ONDOL_V4_IMPL = hex(deployments.ondolAccountV4Impl);
 export const ONDOL_V3_IMPL = hex(deployments.ondolAccountV3Impl);
 export const ONDOL_V2_IMPL = hex(deployments.ondolAccountV2Impl);

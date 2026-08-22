@@ -24,12 +24,14 @@ const d = JSON.parse(readFileSync(src, "utf8"));
 const out = {
   chainId: d.chainId,
   ondolTransferGuard: d.ondolTransferGuard,
+  ondolSpendingGuard: d.ondolSpendingGuard, // bank-model limits guard (new default)
   ariseModule: d.ariseModule,
   ondolProxy: d.ondolProxy,
   ondolAccountV3Impl: d.ondolAccountV3Impl,
   ondolAccountV2Impl: d.ondolAccountV2Impl,
   ondolAccountImpl: d.ondolAccountImpl, // v1 (legacy) — a valid delegation target
   ondolAccountV4Impl: d.ondolAccountV4Impl, // Phase SEC 2.3: email second-factor impl
+  ondolAccountV5Impl: d.ondolAccountV5Impl, // Horizon 1 S1.1: ERC-1271 (dApp sign-in) impl
   suhoCodeAttester: d.suhoCodeAttester,
   suhoMemo: d.suhoMemo, // Phase M: on-chain memo log (batched into execute)
 };

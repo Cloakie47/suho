@@ -8,10 +8,10 @@ import {
   DEMO_ACCOUNT,
   SHOW_DEMO,
   EXPLORER,
-  GUARD_ADDRESS,
+  SPENDING_GUARD_ADDRESS,
   storeCredential,
   ONDOL_PROXY,
-  ONDOL_V3_IMPL,
+  ONDOL_V5_IMPL,
   setActiveAccount,
 } from "../config";
 import { createPasskey } from "../webauthn";
@@ -71,7 +71,7 @@ function makeBootstrap(): Bootstrap {
           ],
         },
         primaryType: "Init",
-        message: { x: passkey.x, y: passkey.y, guard: GUARD_ADDRESS, arise: ARISE_ADDRESS },
+        message: { x: passkey.x, y: passkey.y, guard: SPENDING_GUARD_ADDRESS, arise: ARISE_ADDRESS },
       });
       // signature 3: EIP-712 ProxyInit digest binding WHICH implementation the
       // proxy may install. Defeats a mempool replay of the 7702 authorization.
@@ -79,7 +79,9 @@ function makeBootstrap(): Bootstrap {
         domain: { name: "Suho Ondol Proxy", version: "1", chainId: 91342, verifyingContract: address },
         types: { ProxyInit: [{ name: "implementation", type: "address" }] },
         primaryType: "ProxyInit",
-        message: { implementation: ONDOL_V3_IMPL },
+        // Horizon 1: fresh accounts delegate to V5 (ERC-1271) so they can sign
+        // into a dApp with no upgrade. V5 is V4+V3 byte-for-byte plus isValidSignature.
+        message: { implementation: ONDOL_V5_IMPL },
       });
       const initP = parseSignature(initTyped);
       const proxyP = parseSignature(proxyTyped);

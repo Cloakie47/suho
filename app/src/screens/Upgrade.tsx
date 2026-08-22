@@ -4,6 +4,7 @@ import { createPasskey, relinkPasskey } from "../webauthn";
 import { accountPasskey } from "../chain";
 import { humanError, isUserCancel } from "../errors";
 import { DEMO_ACCOUNT, EXPLORER, isLegacyDemo, storedCredential, storeCredential } from "../config";
+import { isPinnedAccount } from "../locks";
 import { Seal, SealStamp, Spinner, shortAddr } from "../ui";
 import { useToast } from "../toast";
 
@@ -110,10 +111,10 @@ export function Upgrade({ status, onDone }: { status: Status; onDone: () => void
                   0xef0100… (view on explorer)
                 </a>
               </p>
-              {status.upgradeable === false && !isLegacyDemo() && (
+              {isPinnedAccount(status) && !isLegacyDemo() && (
                 <div className="pinned-note">
-                  This account was created before upgradeable accounts. It works, but it cannot
-                  receive future upgrades. Move funds to a new account when convenient.
+                  This account can't use app sign-in or the email second factor. It still works for
+                  sending; new accounts have both.
                 </div>
               )}
               {!hasCredential && !result && isLegacyDemo() && (

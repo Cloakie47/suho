@@ -19,11 +19,11 @@ import { sendOpCode } from "./email.js";
 
 const HOUR = 3_600_000;
 const OP_MAX_PER_HOUR = 5;
-const isAddr = (a: unknown): a is Hex => typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a);
+export const isAddr = (a: unknown): a is Hex => typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a);
 const sixDigit = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
 
 // bytes32(v) as the contract renders it: 0x + 64 lowercase hex, zero-padded.
-const b32 = (v: bigint) => `0x${v.toString(16).padStart(64, "0")}`;
+export const b32 = (v: bigint) => `0x${v.toString(16).padStart(64, "0")}`;
 
 /// Read the V4 lock state. The staticcall reverts on a V1/V2/V3 account (no such
 /// function); treat that as "not locked, nonce 0", so pre-V4 accounts behave
@@ -61,7 +61,7 @@ function opLabel(op: string, param?: string): string {
 
 /// Mint a single-use code committing to (account, domain, code), on chain via the
 /// issuer key, then email it to `deliverTo`. The code is never returned.
-async function mintAndEmail(account: Hex, domain: string, what: string, deliverTo: string): Promise<void> {
+export async function mintAndEmail(account: Hex, domain: string, what: string, deliverTo: string): Promise<void> {
   const code = sixDigit();
   const codeHash = keccak256(encodePacked(["address", "string", "string"], [account, domain, code]));
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 600);

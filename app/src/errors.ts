@@ -79,6 +79,11 @@ export function humanError(err: unknown): { text: string; raw: string } {
   // the disclosure so "TypeError: Failed to fetch" survives.
   const rawCarrier = (err as { raw?: string })?.raw;
   const raw = rawCarrier ?? message;
+  // viem RPC errors bury the reason in `.details`/`.shortMessage` (e.g. a raw
+  // "over rate limit" dump), not `.message`. Fold those into the search text so a
+  // rate limit maps to its sentence instead of leaking the viem error to the UI.
+  const viem = err as { details?: string; shortMessage?: string };
+  const searchText = `${message} ${raw} ${viem?.details ?? ""} ${viem?.shortMessage ?? ""} ${String(err)}`;
   // Errors carrying a ready-made human sentence (e.g. InsufficientFundsError,
   // which needs the dynamic amount + address) surface it verbatim. The raw name
   // stays for the details disclosure.
@@ -90,7 +95,11 @@ export function humanError(err: unknown): { text: string; raw: string } {
       raw,
     };
   }
-  const key = Object.keys(SENTENCES).find((k) => message.includes(k) || raw.includes(k));
+  // A rate limit can arrive as -32016 without the literal words; catch both.
+  if (/-32016|over rate limit|rate limit|too many request/i.test(searchText)) {
+    return { text: SENTENCES["over rate limit"], raw };
+  }
+  const key = Object.keys(SENTENCES).find((k) => searchText.includes(k));
   return { text: key ? SENTENCES[key] : "Something went wrong. Try again.", raw };
 }
 

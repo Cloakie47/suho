@@ -2,18 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { isAddress, parseEther, type Hex } from "viem";
 import { ExternalLink, TriangleAlert } from "lucide-react";
 import { api, type Status } from "../api";
-import { accountNonce, computeChallenge, watchReceipt, type Call } from "../chain";
+import { accountNonce, computeChallenge, watchReceipt, readSpending, type Call } from "../chain";
 import { capForAccount, assertAffordable, InsufficientFundsError } from "../execute";
 import { assertWithPasskey } from "../webauthn";
-import { requireActiveAccount, isLegacyDemo, storedCredential, LARGE_SEND_THRESHOLD_WEI } from "../config";
+import { requireActiveAccount, isLegacyDemo, storedCredential } from "../config";
 import { Checklist, LS_FIRST_SEND } from "./Checklist";
-import { Seal, Spinner, fmtEth, shortAddr } from "../ui";
+import { Seal, Spinner, fmtEth, shortAddr, ResetsIn } from "../ui";
 import { useToast, type TxToast } from "../toast";
 import { fetchActivity, peekActivity, type ActivityItem } from "../activity";
 import { humanError, isUserCancel } from "../errors";
 import { recordSend, sessionStats } from "../stats";
 import { memoCall, sanitizeBody, MEMO_MAX } from "../messages";
-import { requestSendCode } from "../locks";
+import { requestSpendCode, isOverLimit, UNLIMITED } from "../spending";
 
 interface Recipient {
   address: Hex;
@@ -108,10 +108,9 @@ function RecentSends({ account, bump }: { account: string; bump: number }) {
   );
 }
 
-/** Hold-to-confirm interstitial for the one risky send: a large transfer to an
- *  unverified address. There is NO one-time code — honestly, the only approval is
- *  your passkey. This modal adds deliberate friction (press and hold) so the send
- *  can't happen on a stray tap, then one passkey prompt completes it. */
+/** Hold-to-confirm interstitial for a send OVER the owner's limit. Deliberate
+ *  friction (press and hold) so it can't happen on a stray tap; on confirm we
+ *  email a code and collect it, then one passkey prompt completes the send. */
 const HOLD_MS = 1200;
 
 function ConfirmModal({
@@ -154,19 +153,20 @@ function ConfirmModal({
   const held = busy || done.current;
 
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Confirm large transfer">
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Confirm a send over your limit">
       <div className="l2 confirm-modal">
         <div className="confirm-head">
           <span className="confirm-shield" aria-hidden="true">
             <TriangleAlert size={26} color="var(--warn)" strokeWidth={1.75} />
           </span>
           <div>
-            <h2 style={{ margin: 0 }}>Confirm this transfer</h2>
-            <div className="muted">Large transfer to an unverified address.</div>
+            <h2 style={{ margin: 0 }}>Over your limit</h2>
+            <div className="muted">This send is more than your limit allows.</div>
           </div>
         </div>
         <p className="muted" style={{ margin: "12px 0 0" }}>
-          Sending <b>{amount} ETH</b> to an unverified address. Hold to confirm.
+          Sending <b>{amount} ETH</b> is over your limit. Hold to confirm — we'll email a code to
+          your recovery address, then one passkey approves the send.
         </p>
         <button
           className="primary wide hold-confirm"
@@ -208,6 +208,8 @@ export function Send({
   const [phase, setPhase] = useState<SendPhase>({ k: "idle" });
   const [actBump, setActBump] = useState(0);
   const [verifiedNames, setVerifiedNames] = useState<number | null>(null);
+  const [spend, setSpend] = useState<{ perTx: bigint; daily: bigint; spent: bigint; remaining: bigint; windowStart: bigint } | null>(null);
+  const [recoveryOn, setRecoveryOn] = useState<boolean | null>(null);
   const debounceRef = useRef<number>();
   const toast = useToast();
 
@@ -215,6 +217,24 @@ export function Send({
   useEffect(() => {
     api.directory("").then((r) => setVerifiedNames(r.total), () => setVerifiedNames(null));
   }, []);
+
+  // The account's bank-model limits, spent-today, remaining headroom, and window
+  // anchor (drives over-limit detection + the reset timer). Reloaded after each send
+  // (actBump): re-read immediately, then once more after the write settles so the
+  // rail reflects the new spent/remaining without a manual refresh.
+  useEffect(() => {
+    const account = requireActiveAccount();
+    let alive = true;
+    const pull = () => readSpending(account).then((s) => alive && setSpend(s), () => {});
+    pull();
+    api.recoveryStatus(account).then((r) => alive && setRecoveryOn(r.enabled), () => alive && setRecoveryOn(null));
+    // Post-write settle read (only after a send, actBump > 0).
+    const t = actBump > 0 ? window.setTimeout(pull, 1800) : undefined;
+    return () => {
+      alive = false;
+      if (t) window.clearTimeout(t);
+    };
+  }, [actBump]);
 
   // Directory deep-link (D2): arriving with a prefilled recipient starts resolution.
   useEffect(() => {
@@ -292,11 +312,15 @@ export function Send({
       // A balance/cap read failure (network) shouldn't block; the relay path
       // surfaces a mapped error if it truly can't proceed.
     }
-    // Guarded send: a large transfer to an unverified address shows a
-    // hold-to-confirm interstitial first (deliberate friction, not a passkey
-    // prompt). On confirm, ONE passkey signature completes it.
-    const needsConfirm = !recipient.verified && value >= LARGE_SEND_THRESHOLD_WEI;
-    if (needsConfirm && phase.k !== "confirm" && phase.k !== "sendcode") {
+    // Bank model: a send over the per-transaction OR remaining-daily limit needs a
+    // code from the recovery email plus a hold-to-confirm. Recipient identity does
+    // not enter into it. Within limits, it's one passkey tap.
+    const over = spend ? isOverLimit(value, spend.perTx, spend.remaining) : false;
+    if (over && phase.k !== "confirm" && phase.k !== "sendcode") {
+      if (recoveryOn !== true) {
+        setPhase({ k: "error", message: "Set a recovery email to authorize larger sends. Until then this account is capped at your limit." });
+        return;
+      }
       setPhase({ k: "confirm" });
       return;
     }
@@ -351,22 +375,17 @@ export function Send({
     try { return parseEther(amount || "0"); } catch { return 0n; }
   })();
   const willWarn = recipient && !recipient.notFound && !recipient.verified;
-  const willConfirm = willWarn && value >= LARGE_SEND_THRESHOLD_WEI;
+  const willConfirm = !!recipient && !recipient.notFound && !!spend && isOverLimit(value, spend.perTx, spend.remaining);
   const busy = phase.k === "signing" || phase.k === "inflight";
-  const emailLargeSendLock = !!status.locks?.emailLargeSendLock;
 
-  // After the hold-to-confirm: if the account's large-send email lock is on,
-  // request a code (emailed) and collect it; otherwise proceed straight to the
-  // passkey. The hold-to-confirm stays as friction; the code is the real factor.
+  // After the hold-to-confirm on an over-limit send: request the emailed code
+  // (bound to this recipient + value), then collect it. The hold is friction; the
+  // code is the real second factor a device thief can't read.
   const afterHoldConfirm = async () => {
     if (!recipient) return;
-    if (!emailLargeSendLock) {
-      void doSend("");
-      return;
-    }
     setPhase({ k: "sendcode", code: "", sending: true });
     try {
-      await requestSendCode(requireActiveAccount(), recipient.address, value.toString());
+      await requestSpendCode(requireActiveAccount(), recipient.address, value.toString());
       setPhase({ k: "sendcode", code: "", sending: false });
     } catch (e) {
       if (isUserCancel(e)) setPhase({ k: "idle" });
@@ -445,13 +464,18 @@ export function Send({
                   </div>
                 </div>
               ) : (
-                <div className="warnbox">Unverified address. Suho can’t identify who this is.</div>
+                <div className="attestation-note">
+                  Suho can’t say who this address belongs to. On testnet the seal is self-serve, so
+                  it’s identity, not safety — your limits are what protect you.
+                </div>
               )}
             </div>
           </div>
         )}
         {willConfirm && (
-          <div className="warnbox">Large transfer to an unverified address. You'll hold to confirm.</div>
+          <div className="warnbox">
+            This is over your limit. You’ll hold to confirm and enter a code from your email.
+          </div>
         )}
         {phase.k === "signing" && (
           <div className="status-line">
@@ -480,7 +504,11 @@ export function Send({
               </div>
             </div>
             <div className="statrow"><span className="k">Balance</span><span className="v">{fmtEth(status.balance)} ETH</span></div>
-            <div className="statrow"><span className="k">Guard</span><span className="lock-badge on">On</span></div>
+            <div className="statrow"><span className="k">Per-send limit</span><span className="v">{!spend ? "–" : spend.perTx >= UNLIMITED ? "no cap" : `${fmtEth(spend.perTx.toString())} ETH`}</span></div>
+            <div className="statrow"><span className="k">Left today</span><span className="v jade">{!spend ? "–" : spend.daily >= UNLIMITED ? "no cap" : `${fmtEth(spend.remaining.toString())} ETH`}</span></div>
+            {spend && spend.daily < UNLIMITED && (
+              <div className="lim-reset"><ResetsIn windowStart={spend.windowStart} /></div>
+            )}
           </div>
 
           <div className="card">
@@ -494,10 +522,10 @@ export function Send({
           </div>
 
           <div className="card">
-            <h3>How the guard works</h3>
+            <h3>Your limits</h3>
             <p className="explain">
-              Suho warns you before you pay a stranger. A large send to an unverified address stops for a
-              hold to confirm, then your passkey.
+              Send up to your limits with just your passkey. A send over them needs a code from your
+              email plus a hold to confirm. Set your limits on the Limits tab.
             </p>
           </div>
         </div>
@@ -513,14 +541,15 @@ export function Send({
       )}
 
       {phase.k === "sendcode" && recipient && (
-        <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Enter large-send code">
+        <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Enter your code">
           <div className="l2 confirm-modal">
-            <h2 style={{ margin: 0 }}>Confirm this large send</h2>
+            <h2 style={{ margin: 0 }}>Enter your code</h2>
             <p className="muted" style={{ margin: "8px 0 0" }}>
               {phase.sending && !phase.error ? (
-                <><Spinner /> Sending a code to your recovery email…</>
+                <><Spinner /> Emailing a code to your recovery address…</>
               ) : (
-                <>Extra protection is on. Enter the 6-digit code we emailed you to send <b>{amount} ETH</b> to this unverified address.</>
+                <>Enter the 6-digit code we emailed you to send <b>{amount} ETH</b>. Your passkey
+                approves the send next.</>
               )}
             </p>
             <input

@@ -1,4 +1,25 @@
+import { useEffect, useState } from "react";
 import { humanError } from "./errors";
+import { windowResetAt } from "./chain";
+
+/** Live "Resets in Xh Ym" from the guard's on-chain 24h window anchor (unix
+ *  seconds). Re-renders each 30s so the countdown stays honest without a refresh.
+ *  windowStart 0 (or already elapsed) => the copy-voice "starts with your next
+ *  send" line, since the next send opens a fresh window. */
+export function ResetsIn({ windowStart }: { windowStart: bigint }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const reset = windowResetAt(windowStart);
+  if (reset === null) return <>Starts with your first send today</>;
+  const ms = reset - Date.now();
+  if (ms < 60_000) return <>Resets in under a minute</>;
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  return <>Resets in {h > 0 ? `${h}h ${m}m` : `${m}m`}</>;
+}
 
 /** The dojang-style verified seal — the one flourish that must land. */
 export function Seal({ small, large }: { small?: boolean; large?: boolean }) {

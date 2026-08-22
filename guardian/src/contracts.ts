@@ -17,6 +17,7 @@ export const ADDR = {
   // Suho deployments (contracts/deployments/giwa-sepolia.json)
   suhoCodeAttester: deployments.suhoCodeAttester as `0x${string}`,
   ondolTransferGuard: deployments.ondolTransferGuard as `0x${string}`,
+  ondolSpendingGuard: deployments.ondolSpendingGuard as `0x${string}`,
   ariseModule: deployments.ariseModule as `0x${string}`,
   ondolAccountImpl: deployments.ondolAccountImpl as `0x${string}`,
   ondolAccountV2Impl: deployments.ondolAccountV2Impl as `0x${string}`,
@@ -75,6 +76,18 @@ export const ariseModuleAbi = parseAbi([
   "error CodeInvalid()",
   "error CodeExpired()",
   "error CodeAlreadyUsed()",
+]);
+
+// Bank-model limits guard. The guardian reads opNonce (to build the code domain)
+// and the limits/spend views; the app reads them to render the Limits screen.
+export const spendingGuardAbi = parseAbi([
+  "function opNonce(address account) view returns (uint64)",
+  "function limitsOf(address account) view returns (uint128 perTx, uint128 daily)",
+  "function spentToday(address account) view returns (uint128)",
+  "function remainingToday(address account) view returns (uint128)",
+  "function defaultPerTx() view returns (uint128)",
+  "function defaultDaily() view returns (uint128)",
+  "function setLimits(uint128 perTx, uint128 daily, string code)",
 ]);
 
 // Includes every custom error the execute() path can surface (account, guard,
@@ -156,6 +169,9 @@ export const DELEGATION_PREFIX = "0xef0100";
 // detected structurally from the ERC-1967 slot below.
 export const ondolProxyImpl = (deployments.ondolProxy ?? null) as `0x${string}` | null;
 export const ondolAccountV3Impl = (deployments.ondolAccountV3Impl ?? null) as `0x${string}` | null;
+// Horizon 1 S1.1: the ERC-1271 impl. Fresh onboards (incl. inside the /connect
+// popup) delegate to this so a new account can sign into a dApp with no upgrade.
+export const ondolAccountV5Impl = (deployments.ondolAccountV5Impl ?? null) as `0x${string}` | null;
 
 // ERC-1967 implementation slot: keccak256("eip1967.proxy.implementation") - 1.
 // A proxy-fronted account has this set in its own storage; legacy V1/V2 never

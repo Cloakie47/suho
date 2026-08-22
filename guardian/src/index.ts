@@ -27,7 +27,7 @@ import {
   DELEGATION_PREFIX,
   ERC1967_IMPL_SLOT,
   ondolProxyImpl,
-  ondolAccountV3Impl,
+  ondolAccountV5Impl,
   ondolProxyAbi,
   ondolV3Abi,
   GAS_ORACLE,
@@ -61,6 +61,7 @@ import { getDirectory, prewarmDirectory } from "./directory.js";
 import { getCard, prewarmCards } from "./card.js";
 import { registerMessages } from "./messages.js";
 import { registerV4Locks, readLockState } from "./v4locks.js";
+import { registerSpendingGuard } from "./spendingguard.js";
 
 const app = express();
 app.use(express.json());
@@ -269,7 +270,10 @@ app.get("/status", async (req, res) => {
       reverseName(address),
       flashClient.getBalance({ address }), // Flashblocks-fresh
       publicClient.getCode({ address }),
-      publicClient.getStorageAt({ address, slot: ERC1967_IMPL_SLOT }),
+      // Read the ERC-1967 impl slot Flashblocks-fresh: the load-balanced normal RPC
+      // can serve a stale/empty slot right after an upgrade, which used to make
+      // `implementation` fall back to the proxy address and mislabel the version.
+      flashClient.getStorageAt({ address, slot: ERC1967_IMPL_SLOT }),
     ]);
 
     // The 7702 designator target: proxy (new) or a V1/V2 impl (legacy).
@@ -434,6 +438,33 @@ app.post("/upgrade", async (req, res) => {
 
 // ---- POST /relay { account, calls, otpCode?, webauthn } ----
 // Dumb relayer: encodes execute() and pays gas. Authority is the passkey sig.
+// ---- POST /sign1271 (Horizon 1 S1: dApp sign-in / message signing) ----
+// The /connect popup produced a WebAuthn assertion over `hash` (an EIP-191
+// personal_sign digest or an EIP-712 typed-data digest). The guardian owns the
+// DER -> (r,s) -> low-s + ABI encoding, so it turns the raw assertion into the
+// ERC-1271 signature bytes the account's isValidSignature (OndolAccountV5) expects.
+// It first VERIFIES the assertion signs exactly `hash` under the account's live
+// on-chain passkey, so a bad or mismatched assertion never becomes a signature.
+// Pure read + encode: no passkey material stored, no gas spent.
+app.post("/sign1271", async (req, res) => {
+  try {
+    const { account, hash, assertion } = req.body as { account: Hex; hash: Hex; assertion: BrowserAssertion };
+    if (!/^0x[0-9a-fA-F]{40}$/.test(account ?? "")) return res.status(400).json({ error: "invalid account" });
+    if (!/^0x[0-9a-fA-F]{64}$/.test(hash ?? "")) return res.status(400).json({ error: "invalid hash" });
+    const [x, y] = (await publicClient.readContract({
+      address: account,
+      abi: ondolAccountAbi,
+      functionName: "passkey",
+    })) as [Hex, Hex];
+    const ok = await verifyAssertion({ x, y }, hash, assertion);
+    if (!ok) return res.status(400).json({ error: "assertion does not verify for this account and hash" });
+    res.json({ signature: encodeWebAuthnSig(assertion) });
+  } catch (e) {
+    noteError("sign1271", String(e));
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 app.post("/relay", async (req, res) => {
   try {
     const { account, calls, otpCode, webauthn, maxGasPayment } = req.body as {
@@ -603,8 +634,8 @@ app.post("/onboard", async (req, res) => {
     if (!/^0x[0-9a-fA-F]{40}$/.test(address ?? "")) {
       return res.status(400).json({ error: "invalid address" });
     }
-    if (!ondolProxyImpl || !ondolAccountV3Impl) {
-      return res.status(503).json({ error: "proxy/V3 not configured" });
+    if (!ondolProxyImpl || !ondolAccountV5Impl) {
+      return res.status(503).json({ error: "proxy/V5 not configured" });
     }
     // Duplicate-passkey check: one passkey cannot farm onboardings. The key is a
     // public key pair, not PII.
@@ -628,15 +659,17 @@ app.post("/onboard", async (req, res) => {
       return res.status(400).json({ error: "authorization nonce must be 0 (fresh EOA)" });
     }
 
-    // initData runs V3.initializeWithSig behind the proxy (its own passkey sig);
-    // the proxy authorizes the impl choice with the EOA's proxySig.
+    // initData runs initializeWithSig behind the proxy (its own passkey sig); the
+    // proxy authorizes the impl choice with the EOA's proxySig. Horizon 1: the impl
+    // is V5 (ERC-1271). initializeWithSig is byte-identical across V3/V4/V5, so the
+    // V3 ABI fragment encodes it correctly.
     const initData = encodeFunctionData({
       abi: ondolV3Abi,
       functionName: "initializeWithSig",
       args: [
         passkey.x,
         passkey.y,
-        ADDR.ondolTransferGuard,
+        ADDR.ondolSpendingGuard, // bank model: new accounts start on the limits guard
         ADDR.ariseModule,
         initSig.v,
         initSig.r,
@@ -648,7 +681,7 @@ app.post("/onboard", async (req, res) => {
       data: encodeFunctionData({
         abi: ondolProxyAbi,
         functionName: "initialize",
-        args: [ondolAccountV3Impl, initData, proxySig.v, proxySig.r, proxySig.s],
+        args: [ondolAccountV5Impl, initData, proxySig.v, proxySig.r, proxySig.s],
       }),
       authorizationList: [
         {
@@ -1048,6 +1081,9 @@ registerMessages(app, { verifiedBy, noteError });
 
 // ---- Phase SEC 2.3: OndolAccountV4 email second factor (op-code minting) ----
 registerV4Locks(app, { passGate, issueGate, noteError });
+
+// ---- Bank model: spend / limit code minting for OndolSpendingGuard ----
+registerSpendingGuard(app, { noteError });
 
 // PORT from env for hosted deploys (Railway injects it); 8787 for local dev.
 const PORT = Number(process.env.PORT) || 8787;

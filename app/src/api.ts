@@ -78,6 +78,18 @@ export const api = {
     ),
   fee: () =>
     req<{ maxGasPayment: string; gasPrice: string; l1UpperBound: string; eth: string }>("/fee"),
+  // Horizon 1 S1: encode a WebAuthn assertion over `hash` into the ERC-1271
+  // signature bytes (guardian owns the DER->low-s->ABI math). Used by /connect.
+  sign1271: (account: Hex, hash: Hex, assertion: AssertionPayload) =>
+    req<{ signature: Hex }>("/sign1271", post({ account, hash, assertion })),
+  // Bank model: email a code to authorize an over-limit send / a limit raise.
+  // Delivered only to the recovery email, throttled per account. Not passkey-gated:
+  // the send/setLimits that consumes the code carries the only signature that
+  // matters, so a second assertion to request the email would be theater.
+  requestSpendCode: (account: Hex, recipient: Hex, value: string) =>
+    req<{ ok: boolean }>("/spend/request-code", post({ account, recipient, value })),
+  requestLimitCode: (account: Hex, perTx: string, daily: string) =>
+    req<{ ok: boolean }>("/limit/request-code", post({ account, perTx, daily })),
   // (Transfer-OTP retrieval removed: a large unverified send is gated by the
   //  passkey + hold-to-confirm, not a code. See Send.tsx / OndolTransferGuard.)
   // ---- H2: recovery binding ----

@@ -6,23 +6,93 @@ import {
   parseAbi,
   type Hex,
 } from "viem";
-import { CHAIN_ID, FLASH_RPC, NORMAL_RPC, ONDOL_DELEGATION_TARGETS } from "./config";
+import { CHAIN_ID, FLASH_RPC, NORMAL_RPC, ONDOL_DELEGATION_TARGETS, SPENDING_GUARD_ADDRESS } from "./config";
 
 export const flashClient = createPublicClient({ transport: http(FLASH_RPC) });
 export const normalClient = createPublicClient({ transport: http(NORMAL_RPC) });
+
+/** A transient RPC failure worth retrying: GIWA rate limits (-32016 / "over rate
+ *  limit"), 429s, timeouts, and transport/network blips. viem buries the reason in
+ *  `.details`/`.shortMessage`, so scan the whole error, not just `.message`. */
+function isTransientRpc(e: unknown): boolean {
+  const x = e as { details?: string; shortMessage?: string };
+  const blob = `${x?.details ?? ""} ${x?.shortMessage ?? ""} ${String(e)}`;
+  return /over rate limit|-32016|rate limit|too many request|429|-32603|timeout|timed out|failed to fetch|fetch failed|load failed|network/i.test(blob);
+}
+
+/** Retry a read on transient RPC failures with exponential backoff (300ms→1.2s).
+ *  Direct Flashblocks reads (nonce, passkey, balance) are the hot path before an
+ *  execute; a rate-limit blip there must not surface a raw viem error. */
+export async function withRpcRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (!isTransientRpc(e) || i === tries - 1) throw e;
+      await new Promise((r) => setTimeout(r, 300 * 2 ** i));
+    }
+  }
+  throw last;
+}
 
 const accountAbi = parseAbi([
   "function nonce() view returns (uint256)",
   "function passkey() view returns (bytes32 x, bytes32 y)",
 ]);
 
+const spendingGuardAbi = parseAbi([
+  "function limitsOf(address account) view returns (uint128 perTx, uint128 daily)",
+  "function spentToday(address account) view returns (uint128)",
+  "function remainingToday(address account) view returns (uint128)",
+]);
+
+// The guard's daily window is anchored on-chain (Account.windowStart) but has no
+// getter, so we read it straight from storage. `accts` is the guard's only storage
+// variable → mapping base slot 0; the struct packs spent|windowStart|opNonce into
+// base+1 (spent = low 128 bits, windowStart = bits 128-191, opNonce = bits 192-255).
+// Verified on-chain against a live account (see the empirical slot check).
+const GUARD_WINDOW_MS = 24 * 60 * 60 * 1000;
+function acctSlot1(account: Hex): Hex {
+  const base = BigInt(keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [account, 0n])));
+  return `0x${(base + 1n).toString(16).padStart(64, "0")}` as Hex;
+}
+
+/** The account's live spending state from the bank-model guard: its limits, what
+ *  it has spent in the current 24h window, the remaining daily headroom, and the
+ *  window anchor (0 = no active window). Read Flashblocks-fresh with retry (drives
+ *  the Limits screen, the over-limit detection on Send, and the reset timer). */
+export async function readSpending(
+  account: Hex,
+): Promise<{ perTx: bigint; daily: bigint; spent: bigint; remaining: bigint; windowStart: bigint }> {
+  const [limits, spent, remaining, raw] = await withRpcRetry(() =>
+    Promise.all([
+      flashClient.readContract({ address: SPENDING_GUARD_ADDRESS, abi: spendingGuardAbi, functionName: "limitsOf", args: [account] }),
+      flashClient.readContract({ address: SPENDING_GUARD_ADDRESS, abi: spendingGuardAbi, functionName: "spentToday", args: [account] }),
+      flashClient.readContract({ address: SPENDING_GUARD_ADDRESS, abi: spendingGuardAbi, functionName: "remainingToday", args: [account] }),
+      flashClient.getStorageAt({ address: SPENDING_GUARD_ADDRESS, slot: acctSlot1(account) }),
+    ]),
+  );
+  const packed = raw ? BigInt(raw) : 0n;
+  const windowStart = (packed >> 128n) & ((1n << 64n) - 1n);
+  return { perTx: limits[0], daily: limits[1], spent, remaining, windowStart };
+}
+
+/** When the current 24h window resets, as an epoch-ms timestamp — or null if no
+ *  window is active (windowStart 0, or already elapsed → next send starts a fresh
+ *  window). The guard resets when block.timestamp >= windowStart + 24h. */
+export function windowResetAt(windowStart: bigint, nowMs = Date.now()): number | null {
+  if (windowStart === 0n) return null;
+  const resetMs = Number(windowStart) * 1000 + GUARD_WINDOW_MS;
+  return resetMs > nowMs ? resetMs : null;
+}
+
 /** The account's on-chain P-256 passkey. Ground truth for relinking. */
 export async function accountPasskey(account: Hex): Promise<{ x: Hex; y: Hex }> {
-  const [x, y] = await flashClient.readContract({
-    address: account,
-    abi: accountAbi,
-    functionName: "passkey",
-  });
+  const [x, y] = await withRpcRetry(() =>
+    flashClient.readContract({ address: account, abi: accountAbi, functionName: "passkey" }),
+  );
   return { x, y };
 }
 
@@ -49,10 +119,12 @@ export interface Call {
   data: Hex;
 }
 
-/** Fresh account nonce off Flashblocks (read twice; take the max — lag guard). */
+/** Fresh account nonce off Flashblocks (read twice; take the max — lag guard).
+ *  Each read retries with backoff so a Flashblocks rate-limit blip never surfaces
+ *  a raw viem error in the middle of an execute. */
 export async function accountNonce(account: Hex): Promise<bigint> {
   const read = () =>
-    flashClient.readContract({ address: account, abi: accountAbi, functionName: "nonce" });
+    withRpcRetry(() => flashClient.readContract({ address: account, abi: accountAbi, functionName: "nonce" }));
   const [a, b] = [await read(), await read()];
   return a > b ? a : b;
 }
@@ -64,8 +136,17 @@ const ERC1967_IMPL_SLOT =
 
 /** True for proxy-fronted (V3) accounts, which use the capped execute. */
 export async function isUpgradeable(account: Hex): Promise<boolean> {
-  const v = await flashClient.getStorageAt({ address: account, slot: ERC1967_IMPL_SLOT });
+  const v = await withRpcRetry(() => flashClient.getStorageAt({ address: account, slot: ERC1967_IMPL_SLOT }));
   return !!v && BigInt(v) !== 0n;
+}
+
+/** Ground truth for the active implementation behind a proxy: read the ERC-1967
+ *  slot FRESH (Flashblocks + retry), never from a possibly-stale /status field.
+ *  null = the slot is empty (a non-proxy pinned account, or not yet initialized).
+ *  This is the single reliable source for the upgrade selector + version check. */
+export async function readImpl(account: Hex): Promise<Hex | null> {
+  const v = await withRpcRetry(() => flashClient.getStorageAt({ address: account, slot: ERC1967_IMPL_SLOT }));
+  return v && BigInt(v) !== 0n ? (`0x${v.slice(-40)}` as Hex) : null;
 }
 
 /** Mirrors the account's execute challenge. V2: keccak(account, chain, nonce,

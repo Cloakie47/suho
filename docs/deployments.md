@@ -7,13 +7,16 @@ and executed without incident. Deployer/issuer key: `DEPLOYER_*` in `.env`
 | Contract | Address | Explorer | Source verified |
 |---|---|---|---|
 | SuhoCodeAttester | `0x88645529532844C380b40AB68E335CC7a8a0f63B` | [view](https://sepolia-explorer.giwa.io/address/0x88645529532844C380b40AB68E335CC7a8a0f63B) | ✅ 2026-07-21 (Blockscout, Pass) |
-| OndolTransferGuard (current) | `0x4E395754311359Ac12a1005C69eac49E17046eBE` | [view](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) | ✅ 2026-07-27 (Blockscout, Pass) |
+| OndolSpendingGuard (bank-model limits, current) | `0xC0864D941Bd7C0B28A31f67aa4fd7A4473aa4B48` | [view](https://sepolia-explorer.giwa.io/address/0xC0864D941Bd7C0B28A31f67aa4fd7A4473aa4B48) | ✅ 2026-08-18 (Blockscout, Pass) |
+| OndolTransferGuard (recipient-model, superseded) | `0x4E395754311359Ac12a1005C69eac49E17046eBE` | [view](https://sepolia-explorer.giwa.io/address/0x4E395754311359Ac12a1005C69eac49E17046eBE) | ✅ 2026-07-27 (Blockscout, Pass) |
 | OndolTransferGuard (superseded) | `0x106953DB14B1183378976E128AE5cd40C4b493d2` | [view](https://sepolia-explorer.giwa.io/address/0x106953DB14B1183378976E128AE5cd40C4b493d2) | ✅ 2026-07-21 (Blockscout, Pass) |
 | AriseModule | `0x827375200CF4595f71b09497A65BAF10Ca907466` | [view](https://sepolia-explorer.giwa.io/address/0x827375200CF4595f71b09497A65BAF10Ca907466) | ✅ 2026-07-21 (Blockscout, Pass) |
 | OndolAccount (impl, v1, superseded) | `0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4` | [view](https://sepolia-explorer.giwa.io/address/0xD9933BEfC6C6ff968c662c30c765Ce9740aD8Ec4) | ✅ 2026-07-21 (Blockscout, Pass) |
 | OndolAccountV2 (impl, superseded, still supported for pinned accounts) | `0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69` | [view](https://sepolia-explorer.giwa.io/address/0xC512B2B083a38aa75F20E947feC5ee22AA23Bd69) | ✅ 2026-07-21 (Blockscout, Pass) |
 | OndolProxy (upgradeable 7702 target, current) | `0x5641D0D42bCD6450BE30077998Fe64F263A4887B` | [view](https://sepolia-explorer.giwa.io/address/0x5641D0D42bCD6450BE30077998Fe64F263A4887B) | ✅ 2026-07-24 (Blockscout, Pass) |
-| OndolAccountV3 (impl, current) | `0xff164E70038EB91c342981d95f1f59d04499399E` | [view](https://sepolia-explorer.giwa.io/address/0xff164E70038EB91c342981d95f1f59d04499399E) | ✅ 2026-07-24 (Blockscout, Pass) |
+| OndolAccountV3 (impl) | `0xff164E70038EB91c342981d95f1f59d04499399E` | [view](https://sepolia-explorer.giwa.io/address/0xff164E70038EB91c342981d95f1f59d04499399E) | ✅ 2026-07-24 (Blockscout, Pass) |
+| OndolAccountV4 (impl, email second factor) | `0x5C1964075f676Ab1CCBbF948b31D2632A50eEC2e` | [view](https://sepolia-explorer.giwa.io/address/0x5C1964075f676Ab1CCBbF948b31D2632A50eEC2e) | ✅ (Blockscout, Pass) |
+| OndolAccountV5 (impl, ERC-1271 / dApp sign-in, current) | `0x17b4baBCbc213F2688735B966ad4Cf226Ad8a409` | [view](https://sepolia-explorer.giwa.io/address/0x17b4baBCbc213F2688735B966ad4Cf226Ad8a409) | ✅ 2026-08-18 (Blockscout, Pass) |
 | SuhoMemo (on-chain notes) | `0x6999248c4C7B45da530511BDe7E386084d3D9835` | [view](https://sepolia-explorer.giwa.io/address/0x6999248c4C7B45da530511BDe7E386084d3D9835) | ✅ 2026-08-15 (Blockscout, Pass) |
 
 Suho code schema UID (registered on the SchemaRegistry predeploy, resolver 0,

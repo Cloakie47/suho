@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Hex } from "viem";
+import { formatUnits, type Hex } from "viem";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   ExternalLink,
+  Gauge,
   IdCard,
   KeyRound,
   RefreshCw,
+  Settings,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
@@ -33,11 +35,15 @@ function ActivityIcon({ item }: { item: ActivityItem }) {
         ? IdCard
         : item.kind === "upgrade"
           ? ShieldCheck
-          : item.kind === "received"
-            ? ArrowDownLeft
-            : item.kind === "transfer"
-              ? ArrowUpRight
-              : TriangleAlert;
+          : item.kind === "limits"
+            ? Gauge
+            : item.kind === "settings"
+              ? Settings
+              : item.kind === "received"
+                ? ArrowDownLeft
+                : item.kind === "transfer"
+                  ? ArrowUpRight
+                  : TriangleAlert;
   return (
     <span className={cls}>
       <I size={16} strokeWidth={1.5} />
@@ -54,16 +60,35 @@ const typeLabel = (it: ActivityItem): string =>
         ? "Card attested"
         : it.kind === "upgrade"
           ? "Upgraded"
-          : it.kind === "arise"
-            ? "Arise"
-            : "Activity";
+          : it.kind === "limits"
+            ? "Limits"
+            : it.kind === "settings"
+              ? "Account"
+              : it.kind === "arise"
+                ? "Arise"
+                : "Activity";
+
+const trimAmt = (s: string): string => (s.includes(".") ? s.replace(/\.?0+$/, "") : s);
+
+/** Amount + token symbol, always. Never blank when a value moved. */
+function amountLabel(it: ActivityItem): string {
+  if (it.amountWei === undefined) return "—";
+  if (!it.token || it.token === "ETH") return `${fmtEth(it.amountWei, 4)} ETH`;
+  return `${trimAmt(formatUnits(it.amountWei, it.tokenDecimals ?? 18))} ${it.token}`;
+}
 
 function counterparty(it: ActivityItem): string {
   if (it.kind === "card") return "via passkey";
   if (it.kind === "upgrade" || it.kind === "arise") return "self";
+  if (it.kind === "limits" || it.kind === "settings") return "your account";
   if (it.counterpartyName) return `${it.counterpartyName}.up.id`;
-  if (it.counterparty) return `${shortAddr(it.counterparty)}${it.kind !== "received" && !it.verified ? " · unverified" : ""}`;
-  return "";
+  if (it.counterparty) {
+    // Only mark "unverified" when we KNOW it's not verified; unknown (a read
+    // failed) stays neutral — never brand a verified human wrong.
+    const tag = it.kind !== "received" && it.verified === false ? " · unverified" : "";
+    return `${shortAddr(it.counterparty)}${tag}`;
+  }
+  return "—"; // never an empty cell
 }
 
 export function Activity({ status }: { status: Status }) {
@@ -135,7 +160,9 @@ export function Activity({ status }: { status: Status }) {
                 <tbody>
                   {pageItems.map((it) => {
                     const ms = measuredMs(it.hash);
-                    const isOutgoing = (it.kind === "send" || it.kind === "transfer") && !!it.counterparty;
+                    // Return requests are ETH-only; never offer one on a token send.
+                    const isOutgoing =
+                      (it.kind === "send" || it.kind === "transfer") && !!it.counterparty && (!it.token || it.token === "ETH");
                     return (
                       <tr key={it.hash}>
                         <td>
@@ -147,7 +174,7 @@ export function Activity({ status }: { status: Status }) {
                         </td>
                         <td className="mono">{counterparty(it)}</td>
                         <td className="amt">
-                          {it.amountWei !== undefined ? `${fmtEth(it.amountWei, 4)} ETH` : ""}
+                          {amountLabel(it)}
                           {ms !== undefined && <span className="ms"> {(ms / 1000).toFixed(1)}s</span>}
                         </td>
                         <td className="when">

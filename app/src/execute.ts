@@ -1,6 +1,6 @@
 import type { Hex } from "viem";
 import { api } from "./api";
-import { accountNonce, computeChallenge, flashClient, isUpgradeable, watchReceipt, type Call } from "./chain";
+import { accountNonce, computeChallenge, flashClient, isUpgradeable, watchReceipt, withRpcRetry, type Call } from "./chain";
 import { assertWithPasskey, type AssertionPayload } from "./webauthn";
 import { requireActiveAccount, storedCredential } from "./config";
 import { fmtEth } from "./ui";
@@ -32,7 +32,7 @@ export async function assertAffordable(
   calls: Call[],
   maxGasPayment?: bigint,
 ): Promise<void> {
-  const balance = await flashClient.getBalance({ address: account });
+  const balance = await withRpcRetry(() => flashClient.getBalance({ address: account }));
   const needed = calls.reduce((sum, c) => sum + c.value, 0n) + (maxGasPayment ?? 0n);
   if (balance < needed) throw new InsufficientFundsError(account, needed, balance);
 }

@@ -2,8 +2,8 @@ import { parseAbi, encodeFunctionData, type Hex } from "viem";
 import { api } from "./api";
 import { executeWithPasskey } from "./execute";
 import { assertWithPasskey } from "./webauthn";
-import { storedCredential, ONDOL_V4_IMPL } from "./config";
-import type { Call } from "./chain";
+import { storedCredential, ONDOL_V3_IMPL, ONDOL_V5_IMPL } from "./config";
+import { readImpl, type Call } from "./chain";
 
 /// Phase SEC 2.3 client: the OndolAccountV4 email second factor.
 ///
@@ -20,11 +20,13 @@ const v4Abi = parseAbi([
   "function disableEmailLargeSendLock(string code)",
 ]);
 
-// Migrating TO V4 runs the CURRENT impl's upgradeTo, which for a V3 account is
-// the one-arg `upgradeTo(address)` (no code). V4's own upgradeTo takes a second
-// `code` arg, but that signature only exists once the account is already on V4,
-// so it must never be used for the V3 -> V4 migration itself.
-const migrateAbi = parseAbi(["function upgradeTo(address newImplementation)"]);
+// The upgrade selector depends on the account's CURRENT impl, not the target:
+//   - V3 exposes one-arg  upgradeTo(address)                 (selector 0x3659cfe6)
+//   - V4/V5 expose two-arg upgradeTo(address, string code)   (selector 0x36ba9794)
+// Using the wrong one is a self-call to a selector the account doesn't have, which
+// reverts CallFailed (the "couldn't complete" bug). Pick by current version.
+const upgradeV3Abi = parseAbi(["function upgradeTo(address newImplementation)"]);
+const upgradeV4Abi = parseAbi(["function upgradeTo(address newImplementation, string code)"]);
 
 const selfCall = (account: Hex, data: Hex): Call[] => [{ target: account, value: 0n, data }];
 
@@ -49,11 +51,18 @@ export async function requestSendCode(account: Hex, recipient: Hex, valueWei: st
 }
 
 // ---- the lock ops (each a passkey-signed execute on the active account) ----
-export async function upgradeToV4(account: Hex): Promise<Hex> {
-  // V3 -> V4 migration: the current (V3) impl's one-arg upgradeTo.
-  const data = encodeFunctionData({ abi: migrateAbi, functionName: "upgradeTo", args: [ONDOL_V4_IMPL] });
-  return (await executeWithPasskey(selfCall(account, data))).txHash;
+
+/** A pinned account (non-proxy delegation, bootstrap key destroyed) genuinely
+ *  can't gain app sign-in or the locks. Carries `.human` so errors.ts surfaces the
+ *  plain sentence rather than a generic "something went wrong". */
+export class NotUpgradeableError extends Error {
+  human = "This account can't use app sign-in or the email second factor. New accounts have both.";
+  constructor() {
+    super("NotUpgradeable");
+    this.name = "NotUpgradeableError";
+  }
 }
+
 export async function enableSensitiveOpLock(account: Hex): Promise<Hex> {
   const data = encodeFunctionData({ abi: v4Abi, functionName: "enableSensitiveOpLock", args: [] });
   return (await executeWithPasskey(selfCall(account, data))).txHash;
@@ -76,7 +85,37 @@ export async function setGuardGated(account: Hex, newGuard: Hex, code: string): 
   return (await executeWithPasskey(selfCall(account, data))).txHash;
 }
 
-/** Is this account running the V4 implementation (email-second-factor capable)? */
-export function isV4(status: { implementation?: Hex | null }): boolean {
-  return (status.implementation ?? "").toLowerCase() === ONDOL_V4_IMPL.toLowerCase();
+type ImplStatus = {
+  implementation?: Hex | null;
+  delegationShape?: "proxy" | "v2" | "v1" | "unknown" | "none";
+};
+
+/** THE SINGLE SOURCE OF TRUTH for what an account can do. Every legacy/upgrade/
+ *  sign-in decision in the app derives from this — no local re-derivations, no
+ *  inferring capability from an optional field's falsiness or an impl allow-list.
+ *
+ *  Capability comes from the DELEGATION SHAPE (the guardian's structural signal):
+ *    - isProxy  → an upgradeable account (can hold locks, can gain app sign-in)
+ *    - isPinned → EXACTLY a v1/v2 non-proxy account (bootstrap key destroyed; it
+ *                 can never be upgraded). Nothing else is ever "pinned/legacy".
+ *  Version (isV5, informational) reads the impl; when the /status impl is stale it
+ *  may be wrong, so it is NEVER used to decide pinned/upgradeable — only the shape
+ *  is, and the actual upgrade re-reads ground truth in ensureV5. */
+export interface AccountCaps {
+  isProxy: boolean;
+  isPinned: boolean;
+  isV5: boolean;
+  canManageLocks: boolean; // any proxy account (bridges to V5 on first enable)
+  needsBridge: boolean; // proxy but not yet V5 → a silent one-time upgrade
 }
+export function accountCaps(status: ImplStatus): AccountCaps {
+  const shape = status.delegationShape;
+  const isProxy = shape === "proxy";
+  const isPinned = shape === "v1" || shape === "v2";
+  const isV5 = (status.implementation ?? "").toLowerCase() === ONDOL_V5_IMPL.toLowerCase();
+  return { isProxy, isPinned, isV5, canManageLocks: isProxy, needsBridge: isProxy && !isV5 };
+}
+
+// Thin, named wrappers over the one source (kept so call sites read clearly).
+export const isPinnedAccount = (s: ImplStatus): boolean => accountCaps(s).isPinned;
+export const canManageLocks = (s: ImplStatus): boolean => accountCaps(s).canManageLocks;

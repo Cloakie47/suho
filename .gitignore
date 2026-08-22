@@ -1,7 +1,10 @@
 # Foundry build artifacts
 contracts/out/
 contracts/cache/
-contracts/broadcast/
+# NOTE: broadcast logs are NOT ignored here — contracts/.gitignore (Foundry's own)
+# does `!/broadcast` and tracks real-chain deploy records as provenance, excluding
+# only local anvil (31337) and dry-runs. A root `contracts/broadcast/` line would be
+# dead (overridden by the nested negation) and misleading, so it is intentionally absent.
 
 # Node
 node_modules/

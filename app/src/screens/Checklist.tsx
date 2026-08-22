@@ -3,6 +3,7 @@ import { Check, Copy } from "lucide-react";
 import type { Hex } from "viem";
 import { api, type Status } from "../api";
 import { executeWithPasskey, signGateChallenge } from "../execute";
+import { enableSensitiveOpLock } from "../locks";
 import { requireActiveAccount } from "../config";
 import { Seal, Spinner, fmtEth } from "../ui";
 import { useToast, type TxToast } from "../toast";
@@ -96,6 +97,17 @@ export function Checklist({ status, refresh }: { status: Status; refresh: () => 
       setCode("");
       setEmail("");
       toast.note("Recovery is on. Codes go to your email.");
+      // Bank model: now that a code can be delivered, lock account changes behind
+      // it (raising limits, repointing the guard, upgrading all need the emailed
+      // code). Enabling is one passkey tap; skip if it's already on or unsupported.
+      if (status.locks && !status.locks.sensitiveOpLock) {
+        try {
+          await enableSensitiveOpLock(account);
+          refresh();
+        } catch {
+          /* not fatal — the user can complete this later; recovery is already on */
+        }
+      }
     } catch (e) {
       setRecErr(humanError(e).text);
     } finally {
