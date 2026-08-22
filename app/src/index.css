@@ -213,6 +213,13 @@ a:hover { text-decoration: underline; }
   .tbl tr td:last-child { border-bottom: 0; }
   .tbl td.amt, .tbl td.when { text-align: left; }
   .act-cell { justify-content: flex-start; }
+
+  /* Memo card joins the transaction card into one unit: the tx card drops its
+     bottom edge, the memo card drops its top edge, radii meet in the middle. */
+  .tbl tr.has-memo { border-bottom: 0; margin-bottom: 0; border-radius: 12px 12px 0 0; padding-bottom: 6px; }
+  .tbl tr.memo-row { border-top: 0; border-radius: 0 0 12px 12px; padding-top: 4px; padding-bottom: 12px; }
+  .tbl tr.memo-row td.memo-spacer { display: none; }
+  .tbl tr.memo-row td.memo-cell { display: block; border-bottom: 0; padding: 2px 0 0; }
 }
 
 .attestation-note { color: var(--ink-dim); font-size: 0.74rem; cursor: help; }
@@ -713,10 +720,23 @@ button.danger-outline { border-color: var(--danger); color: var(--danger); }
 }
 
 /* inline memo under an activity row */
-.act-memo {
-  margin: -4px 0 8px 42px; padding-left: 10px; border-left: 2px solid var(--line-strong);
-  color: var(--ink-dim); font-size: 0.86rem; font-style: italic; line-height: 1.4;
+/* Bank-statement memo line: its own full-width row beneath the transaction,
+   aligned to the counterparty column. The row above it drops its divider so the
+   two read as one unit; the divider falls after the memo (see .tbl rules). */
+.memo-cell { padding-top: 0 !important; padding-bottom: 12px !important; }
+.memo-line {
+  display: flex; align-items: center; gap: 7px; width: 100%; max-width: 100%;
+  margin: 0; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; font: inherit;
 }
+.memo-icon { color: var(--ink-soft, var(--ink-dim)); flex: none; opacity: 0.7; }
+.memo-line.expanded { align-items: flex-start; }
+.memo-line.expanded .memo-icon { margin-top: 2px; }
+.memo-text {
+  min-width: 0; flex: 1 1 auto;
+  color: var(--ink-dim); font-size: 0.85rem; font-style: italic; line-height: 1.45;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.memo-line.expanded .memo-text { white-space: normal; overflow: visible; }
 .act-actions { margin: -2px 0 8px 42px; display: flex; }
 .act-actions:empty { display: none; }
 
@@ -812,9 +832,17 @@ button.ghost.danger { color: var(--danger); border-color: rgba(194, 59, 53, 0.4)
 }
 .tbl td { padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 0.9rem; vertical-align: middle; }
 .tbl tr:last-child td { border-bottom: 0; }
+/* A row that owns a memo drops its own divider so it visually attaches to the memo
+   line beneath it; the divider then falls after the memo row's cells. */
+.tbl tr.has-memo > td { border-bottom: 0; }
+.tbl tr.memo-row > td { border-bottom: 1px solid var(--line); }
+.tbl tr.memo-row:last-child > td { border-bottom: 0; }
+.tbl tr.memo-row:hover { background: none; }
 .tbl .amt { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
 .tbl .when { color: var(--ink-dim); font-family: var(--font-mono); font-size: 0.76rem; white-space: nowrap; }
-.tbl .mono { color: var(--ink-dim); }
+/* Counterparty (address/name + optional "· unverified") stays on one line — a
+   table cell must never wrap. Truncates with an ellipsis if it ever runs long. */
+.tbl .mono { color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
 .ic-badge { width: 30px; height: 30px; border-radius: 8px; display: inline-grid; place-items: center; background: rgba(27,25,23,0.05); color: var(--ink-dim); flex: none; }
 .ic-badge.amber { color: var(--warn-ink); }
 .ic-badge.jade { color: var(--jade); }

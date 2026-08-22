@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { formatUnits, type Hex } from "viem";
 import {
   ArrowDownLeft,
@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Settings,
   ShieldCheck,
+  StickyNote,
   TriangleAlert,
 } from "lucide-react";
 import { type Status } from "../api";
@@ -98,6 +99,14 @@ export function Activity({ status }: { status: Status }) {
   const [page, setPage] = useState(0);
   const [bump, setBump] = useState(0);
   const [requestFor, setRequestFor] = useState<ActivityItem | null>(null);
+  // Which memo lines are expanded (by tx hash). Collapsed = single ellipsised line.
+  const [expandedMemos, setExpandedMemos] = useState<Set<string>>(new Set());
+  const toggleMemo = (hash: string) =>
+    setExpandedMemos((prev) => {
+      const next = new Set(prev);
+      next.has(hash) ? next.delete(hash) : next.add(hash);
+      return next;
+    });
   const msg = useMessages(account, bump);
 
   const load = useCallback(async (force = false) => {
@@ -163,41 +172,64 @@ export function Activity({ status }: { status: Status }) {
                     // Return requests are ETH-only; never offer one on a token send.
                     const isOutgoing =
                       (it.kind === "send" || it.kind === "transfer") && !!it.counterparty && (!it.token || it.token === "ETH");
+                    const hasMemo = !!it.memo;
+                    const expanded = expandedMemos.has(it.hash);
                     return (
-                      <tr key={it.hash}>
-                        <td>
-                          <div className="rowmain">
-                            <ActivityIcon item={it} />
-                            <span className="rowtitle">{typeLabel(it)}</span>
-                          </div>
-                          {it.memo && <div className="act-memo">"{it.memo}"</div>}
-                        </td>
-                        <td className="mono">{counterparty(it)}</td>
-                        <td className="amt">
-                          {amountLabel(it)}
-                          {ms !== undefined && <span className="ms"> {(ms / 1000).toFixed(1)}s</span>}
-                        </td>
-                        <td className="when">
-                          {new Date(it.timestamp).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td className="act-cell">
-                          <RowRequestAction
-                            amountWei={it.amountWei}
-                            isOutgoing={isOutgoing}
-                            verified={status.isVerified}
-                            existing={msg.sentRequests.get(it.hash.toLowerCase())}
-                            onOpen={() => setRequestFor(it)}
-                          />
-                          <a className="act-link" href={it.explorer} target="_blank" rel="noreferrer" aria-label="View on explorer">
-                            <ExternalLink size={14} strokeWidth={1.5} />
-                          </a>
-                        </td>
-                      </tr>
+                      <Fragment key={it.hash}>
+                        <tr className={hasMemo ? "has-memo" : undefined}>
+                          <td>
+                            <div className="rowmain">
+                              <ActivityIcon item={it} />
+                              <span className="rowtitle">{typeLabel(it)}</span>
+                            </div>
+                          </td>
+                          <td className="mono">{counterparty(it)}</td>
+                          <td className="amt">
+                            {amountLabel(it)}
+                            {ms !== undefined && <span className="ms"> {(ms / 1000).toFixed(1)}s</span>}
+                          </td>
+                          <td className="when">
+                            {new Date(it.timestamp).toLocaleString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="act-cell">
+                            <RowRequestAction
+                              amountWei={it.amountWei}
+                              isOutgoing={isOutgoing}
+                              verified={status.isVerified}
+                              existing={msg.sentRequests.get(it.hash.toLowerCase())}
+                              onOpen={() => setRequestFor(it)}
+                            />
+                            <a className="act-link" href={it.explorer} target="_blank" rel="noreferrer" aria-label="View on explorer">
+                              <ExternalLink size={14} strokeWidth={1.5} />
+                            </a>
+                          </td>
+                        </tr>
+                        {hasMemo && (
+                          // Bank-statement note: a full-width line beneath the row,
+                          // aligned to the counterparty column. Single line, ellipsis;
+                          // tap to expand in place (memos are capped at 140 chars).
+                          <tr className="memo-row">
+                            <td className="memo-spacer" aria-hidden="true" />
+                            <td className="memo-cell" colSpan={4}>
+                              <button
+                                type="button"
+                                className={`memo-line${expanded ? " expanded" : ""}`}
+                                onClick={() => toggleMemo(it.hash)}
+                                title={expanded ? "Collapse note" : it.memo}
+                                aria-expanded={expanded}
+                              >
+                                <StickyNote className="memo-icon" size={13} strokeWidth={1.5} aria-hidden="true" />
+                                <span className="memo-text">{it.memo}</span>
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
