@@ -3,6 +3,7 @@ import { api } from "./api";
 import { accountNonce, computeChallenge, flashClient, isUpgradeable, watchReceipt, withRpcRetry, type Call } from "./chain";
 import { assertWithPasskey, type AssertionPayload } from "./webauthn";
 import { requireActiveAccount, storedCredential } from "./config";
+import { convergenceCalls } from "./converge";
 import { fmtEth } from "./ui";
 
 /** Thrown by assertAffordable when the account can't cover value + gas cap. It
@@ -54,8 +55,11 @@ export async function capForAccount(account: Hex): Promise<bigint | undefined> {
 }
 
 /** Lifecycle hooks so the caller's toast can mutate as the tx progresses.
- *  `sent` fires once the relay accepted the tx (toast goes pending). */
+ *  `sent` fires once the relay accepted the tx (toast goes pending). `converging`
+ *  fires when the account is behind CURRENT_TARGET and this tx will silently bring
+ *  it current in the same batch — the caller narrates "Preparing your account". */
 export interface ExecuteHooks {
+  converging?(): void;
   sent?(txHash: Hex): void;
   preconf?(ms: number): void;
   final?(txHash: Hex, inclusionMs: number): void;
@@ -63,7 +67,10 @@ export interface ExecuteHooks {
 }
 
 /** Shared passkey-authorized execute: sign over (account, chain, nonce, calls),
- *  relay through the guardian, watch Flashblocks for the real timing. */
+ *  relay through the guardian, watch Flashblocks for the real timing. Any account
+ *  behind CURRENT_TARGET converges here — the convergence calls are prepended into
+ *  the SAME batch, so a lagging account comes current on this one passkey tap with
+ *  no version words and no separate migration step. */
 export async function executeWithPasskey(
   calls: Call[],
   otpCode = "",
@@ -72,16 +79,21 @@ export async function executeWithPasskey(
   const account = requireActiveAccount();
   const credentialId = storedCredential();
   if (!credentialId) throw new Error("No passkey linked on this device. Visit Upgrade first.");
+  // Convergence rides this action: prepend the impl/guard delta (if any) so the
+  // whole batch is one signature. Zero-value self-calls the outgoing guard permits.
+  const converge = await convergenceCalls(account);
+  if (converge.length) hooks?.converging?.();
+  const batch = [...converge, ...calls];
   const [nonce, maxGasPayment] = await Promise.all([accountNonce(account), capForAccount(account)]);
   // Affordability preflight BEFORE the passkey prompt: don't make the user
   // authenticate a transaction their account can't pay for.
-  await assertAffordable(account, calls, maxGasPayment);
-  const challenge = computeChallenge(account, nonce, calls, maxGasPayment);
+  await assertAffordable(account, batch, maxGasPayment);
+  const challenge = computeChallenge(account, nonce, batch, maxGasPayment);
   const webauthn = await assertWithPasskey(credentialId, challenge);
   const t0 = performance.now();
   const { txHash } = await api.relay(
     account,
-    calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
+    batch.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
     otpCode,
     webauthn,
     maxGasPayment?.toString(),

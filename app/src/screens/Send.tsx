@@ -14,6 +14,7 @@ import { humanError, isUserCancel } from "../errors";
 import { recordSend, sessionStats } from "../stats";
 import { memoCall, sanitizeBody, MEMO_MAX } from "../messages";
 import { requestSpendCode, isOverLimit, UNLIMITED } from "../spending";
+import { convergenceCalls, needsConvergence } from "../converge";
 
 interface Recipient {
   address: Hex;
@@ -210,6 +211,10 @@ export function Send({
   const [verifiedNames, setVerifiedNames] = useState<number | null>(null);
   const [spend, setSpend] = useState<{ perTx: bigint; daily: bigint; spent: bigint; remaining: bigint; windowStart: bigint } | null>(null);
   const [recoveryOn, setRecoveryOn] = useState<boolean | null>(null);
+  const [converging, setConverging] = useState(false);
+  // The account is behind CURRENT_TARGET and will come current on its next send.
+  // Drives the pre-send copy; the actual convergence is read fresh at send time.
+  const [convergePending, setConvergePending] = useState(false);
   const debounceRef = useRef<number>();
   const toast = useToast();
 
@@ -228,6 +233,7 @@ export function Send({
     const pull = () => readSpending(account).then((s) => alive && setSpend(s), () => {});
     pull();
     api.recoveryStatus(account).then((r) => alive && setRecoveryOn(r.enabled), () => alive && setRecoveryOn(null));
+    needsConvergence(account).then((n) => alive && setConvergePending(n), () => {});
     // Post-write settle read (only after a send, actBump > 0).
     const t = actBump > 0 ? window.setTimeout(pull, 1800) : undefined;
     return () => {
@@ -296,8 +302,21 @@ export function Send({
     // Build the batch up front: the transfer, plus (optionally) an on-chain memo
     // in the SAME execute() — one passkey tap, one atomic tx (Phase M).
     const memo = memoCall(recipient.address, note);
-    const calls: Call[] = [{ target: recipient.address, value, data: "0x" }];
-    if (memo) calls.push(memo);
+    const userCalls: Call[] = [{ target: recipient.address, value, data: "0x" }];
+    if (memo) userCalls.push(memo);
+
+    // Convergence rides this send: if the account is behind CURRENT_TARGET, prepend
+    // the impl/guard delta into the SAME batch so it comes current on this one tap,
+    // no separate migration. Ground-truth read (self-calls the outgoing guard lets
+    // through). "Preparing your account" is narrated on the signing line.
+    let converge: Call[] = [];
+    try {
+      converge = await convergenceCalls(requireActiveAccount());
+    } catch {
+      // A convergence read failure must never block a send — just skip it this time.
+    }
+    const needsConverge = converge.length > 0;
+    const calls: Call[] = [...converge, ...userCalls];
 
     // Affordability preflight (value + gas reimbursement cap) with a clear
     // message BEFORE the hold-to-confirm or passkey prompt.
@@ -314,8 +333,17 @@ export function Send({
     }
     // Bank model: a send over the per-transaction OR remaining-daily limit needs a
     // code from the recovery email plus a hold-to-confirm. Recipient identity does
-    // not enter into it. Within limits, it's one passkey tap.
-    const over = spend ? isOverLimit(value, spend.perTx, spend.remaining) : false;
+    // not enter into it. Within limits, it's one passkey tap. A send that still
+    // needs convergence runs under the OUTGOING guard (the account caches its guard
+    // at execute entry), so the bank limit engages from the NEXT send, not this one.
+    //
+    // FUTURE EDGE (bank -> bank convergence): once an OLD guard is itself a limit
+    // guard, the correct gate for a converging send is the OUTGOING guard's limits
+    // (that guard checks this tx), not the incoming one's. Today every pre-bank guard
+    // (the OTP / honest-transfer guards) demands nothing for a small send, so
+    // skipping the gate here is exactly right; revisit this line when a lagging
+    // account can already be on a limit guard.
+    const over = !needsConverge && spend ? isOverLimit(value, spend.perTx, spend.remaining) : false;
     if (over && phase.k !== "confirm" && phase.k !== "sendcode") {
       if (recoveryOn !== true) {
         setPhase({ k: "error", message: "Set a recovery email to authorize larger sends. Until then this account is capped at your limit." });
@@ -327,6 +355,7 @@ export function Send({
     const fromConfirm = phase.k === "confirm" || phase.k === "sendcode";
     let handle: TxToast | null = null;
     try {
+      setConverging(needsConverge);
       setPhase({ k: "signing" });
       const [nonce, maxGasPayment] = await Promise.all([
         accountNonce(requireActiveAccount()),
@@ -335,7 +364,11 @@ export function Send({
       const challenge = computeChallenge(requireActiveAccount(), nonce, calls, maxGasPayment);
       const webauthn = await assertWithPasskey(credentialId, challenge); // the one prompt
       setPhase({ k: "inflight" });
-      handle = toast.begin(`Sending ${amount} ETH to ${recipient.display}…`);
+      handle = toast.begin(
+        needsConverge
+          ? `Preparing your account, then sending ${amount} ETH…`
+          : `Sending ${amount} ETH to ${recipient.display}…`,
+      );
       const h = handle;
       const t0 = performance.now();
       const { txHash } = await api.relay(
@@ -353,10 +386,12 @@ export function Send({
       recordSend(txHash, timing.preconfMs);
       localStorage.setItem(LS_FIRST_SEND, "1"); // O5 checklist step 4
       setNote("");
+      setConverging(false);
       setPhase({ k: "idle" });
-      setActBump((b) => b + 1);
+      setActBump((b) => b + 1); // re-reads spend + convergence (now current)
       refresh();
     } catch (e) {
+      setConverging(false);
       if (isUserCancel(e)) {
         handle?.dismiss();
         setPhase(fromConfirm ? { k: "confirm" } : { k: "idle" });
@@ -375,7 +410,8 @@ export function Send({
     try { return parseEther(amount || "0"); } catch { return 0n; }
   })();
   const willWarn = recipient && !recipient.notFound && !recipient.verified;
-  const willConfirm = !!recipient && !recipient.notFound && !!spend && isOverLimit(value, spend.perTx, spend.remaining);
+  const willConfirm =
+    !!recipient && !recipient.notFound && !convergePending && !!spend && isOverLimit(value, spend.perTx, spend.remaining);
   const busy = phase.k === "signing" || phase.k === "inflight";
 
   // After the hold-to-confirm on an over-limit send: request the emailed code
@@ -479,7 +515,7 @@ export function Send({
         )}
         {phase.k === "signing" && (
           <div className="status-line">
-            <Spinner /> Confirm with your passkey…
+            <Spinner /> {converging ? "Preparing your account (first time only), then confirm with your passkey…" : "Confirm with your passkey…"}
           </div>
         )}
         {phase.k === "error" && <div className="errbox">{phase.message}</div>}

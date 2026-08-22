@@ -55,6 +55,16 @@ export const ONDOL_PROXY = hex(deployments.ondolProxy);
 export const ONDOL_V5_IMPL = hex(deployments.ondolAccountV5Impl);
 export const ONDOL_V4_IMPL = hex(deployments.ondolAccountV4Impl);
 export const ONDOL_V3_IMPL = hex(deployments.ondolAccountV3Impl);
+
+/** THE single definition of a CURRENT Suho account: the impl it should run and the
+ *  guard it should point at. Everything behind this is a lagging generation that
+ *  converges here on the owner's next action (see converge.ts) — there are no
+ *  user-facing upgrade generations. Derived from deployments, so "current" tracks
+ *  whatever is actually shipped; never hardcode a version anywhere else. */
+export const CURRENT_TARGET = {
+  impl: ONDOL_V5_IMPL,
+  guard: SPENDING_GUARD_ADDRESS,
+} as const;
 export const ONDOL_V2_IMPL = hex(deployments.ondolAccountV2Impl);
 export const ONDOL_V1_IMPL = hex(deployments.ondolAccountImpl);
 // Phase M: on-chain memo log. A note is appended as a second call in the same
